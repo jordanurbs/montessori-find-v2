@@ -1,16 +1,27 @@
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { getSchoolById, getReviewsBySchoolId } from "@/lib/supabase"
+import { getSchoolBySlugs, getReviewsBySchoolSlugs, getSchoolSlugParams } from "@/lib/supabase"
 import { GoogleMap } from "@/components/google-map"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Star, MapPin, Phone, Globe, Mail, ArrowLeft, Award } from "lucide-react"
 
-export default async function SchoolPage(props: { params: { id: string } }) {
-  const schoolId = props.params.id
-  const school = await getSchoolById(schoolId)
-  const reviews = await getReviewsBySchoolId(schoolId)
+// Generate all slug parameters for static page generation
+export async function generateStaticParams() {
+  return getSchoolSlugParams()
+}
+
+export default async function SchoolPage(props: { 
+  params: { state_abbr: string, city_slug: string, school_slug: string } 
+}) {
+  const { state_abbr, city_slug, school_slug } = props.params
+  
+  // Get school data by slug parameters
+  const school = await getSchoolBySlugs(state_abbr, city_slug, school_slug)
+  
+  // Get reviews for the school by slug parameters
+  const reviews = await getReviewsBySchoolSlugs(state_abbr, city_slug, school_slug)
 
   if (!school) {
     notFound()
@@ -21,11 +32,11 @@ export default async function SchoolPage(props: { params: { id: string } }) {
   return (
     <div className="container mx-auto px-4 py-8">
       <Link
-        href={`/states/${school.state_abbr.toLowerCase()}`}
+        href={`/states/${state_abbr}/${city_slug}`}
         className="inline-flex items-center text-emerald-600 hover:text-emerald-700 mb-6"
       >
         <ArrowLeft className="h-4 w-4 mr-2" />
-        Back to {school.state} Schools
+        Back to {school.city} Schools
       </Link>
 
       <div className="grid md:grid-cols-3 gap-8">
@@ -227,4 +238,4 @@ export default async function SchoolPage(props: { params: { id: string } }) {
       </div>
     </div>
   )
-}
+} 
