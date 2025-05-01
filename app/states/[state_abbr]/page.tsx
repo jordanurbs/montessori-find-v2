@@ -7,8 +7,10 @@ import { slugify } from "@/lib/utils"
 import { AMSPathwayModal } from "@/components/ams-pathway-modal"
 
 export async function generateStaticParams() {
-  const stateParams = await getAllStateAbbrs()
-  return stateParams
+  const stateAbbrs = await getAllStateAbbrs()
+  return stateAbbrs.map((item) => ({
+    state_abbr: item.state_abbr.toLowerCase(),
+  }))
 }
 
 export default async function StatePage(props: { params: { state_abbr: string } }) {

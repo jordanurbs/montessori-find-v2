@@ -7,6 +7,10 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true, // Disable TypeScript checking during build
   },
+  // Configure metadata base URL
+  experimental: {
+    appDir: true,
+  },
   // Add redirects for pages that might exist in Google's index
   async redirects() {
     return [
