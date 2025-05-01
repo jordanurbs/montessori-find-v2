@@ -5,11 +5,48 @@ import { GoogleMap } from "@/components/google-map"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Star, MapPin, Phone, Globe, Mail, ArrowLeft, Award } from "lucide-react"
+import { Star, MapPin, Phone, Globe, Mail, ArrowLeft, Award, Facebook, Twitter, Instagram, Youtube, Linkedin } from "lucide-react"
 
 // Generate all slug parameters for static page generation
 export async function generateStaticParams() {
   return getSchoolSlugParams()
+}
+
+// Helper function to parse social media links JSON
+function parseSocialMediaLinks(socialMediaLinksJson: string | null) {
+  if (!socialMediaLinksJson) return [];
+  
+  try {
+    // Try parsing the JSON
+    const socialLinks = JSON.parse(socialMediaLinksJson);
+    
+    // Return an array of parsed links if valid
+    if (Array.isArray(socialLinks)) {
+      return socialLinks;
+    } else if (typeof socialLinks === 'object') {
+      // If it's an object, convert to array of {platform, url} objects
+      return Object.entries(socialLinks).map(([platform, url]) => ({ platform, url }));
+    }
+    
+    return [];
+  } catch (error) {
+    console.error("Error parsing social media links:", error);
+    return [];
+  }
+}
+
+// Helper function to get the icon for a social media platform
+function getSocialMediaIcon(platform: string) {
+  const lowerPlatform = platform.toLowerCase();
+  
+  if (lowerPlatform.includes('facebook')) return Facebook;
+  if (lowerPlatform.includes('twitter') || lowerPlatform.includes('x.com')) return Twitter;
+  if (lowerPlatform.includes('instagram')) return Instagram;
+  if (lowerPlatform.includes('youtube')) return Youtube;
+  if (lowerPlatform.includes('linkedin')) return Linkedin;
+  
+  // Default to Globe icon if platform is not recognized
+  return Globe;
 }
 
 export default async function SchoolPage(props: { 
@@ -30,6 +67,9 @@ export default async function SchoolPage(props: {
   }
 
   const fullAddress = `${school.address}`
+  
+  // Parse social media links if available
+  const socialMediaLinks = parseSocialMediaLinks(school.social_media_links);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -70,6 +110,21 @@ export default async function SchoolPage(props: {
                 <span className="ml-2 text-gray-600">
                   {school.rating.toFixed(1)} ({school.total_ratings}{" "}
                   {Number.parseInt(school.total_ratings) === 1 ? "review" : "reviews"})
+                </span>
+              </div>
+            )}
+            
+            {/* Display AMS Pathway Stage if available */}
+            {school.ams_pathway_stage && (
+              <div className="mt-2">
+                <span className="bg-blue-100 text-blue-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded">
+                  {school.detail_page_url ? (
+                    <a href={school.detail_page_url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                      {school.ams_pathway_stage}
+                    </a>
+                  ) : (
+                    school.ams_pathway_stage
+                  )}
                 </span>
               </div>
             )}
@@ -196,8 +251,64 @@ export default async function SchoolPage(props: {
                   </div>
                 </div>
               )}
+              
+              {/* Social Media Links */}
+              {socialMediaLinks.length > 0 && (
+                <>
+                  <div className="border-t border-gray-200 pt-4 mt-4">
+                    <div className="font-medium mb-2">Social Media</div>
+                    <div className="flex flex-wrap gap-3">
+                      {socialMediaLinks.map((link, index) => {
+                        if (!link.url || !link.platform) return null;
+                        
+                        const IconComponent = getSocialMediaIcon(link.platform);
+                        return (
+                          <a 
+                            key={index} 
+                            href={link.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-gray-600 hover:text-emerald-600 transition-colors"
+                            title={link.platform}
+                          >
+                            <IconComponent className="h-6 w-6" />
+                          </a>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
+
+          {/* Additional Pathway Information */}
+          {school.ams_pathway_stage && school.detail_page_url && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Additional Information</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex items-start">
+                    <Award className="h-5 w-5 mr-3 text-emerald-600 mt-0.5" />
+                    <div>
+                      <div className="font-medium">AMS Pathway Stage</div>
+                      <div className="text-sm">{school.ams_pathway_stage}</div>
+                      <a
+                        href={school.detail_page_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-emerald-600 hover:underline text-sm"
+                      >
+                        View Details
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>
