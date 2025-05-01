@@ -2,8 +2,9 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { getAllStateAbbrs, getCitySlugsByStateAbbr, getSchoolsByCitySlug, getStates } from "@/lib/supabase"
 import { Card, CardContent } from "@/components/ui/card"
-import { Star, MapPin, ArrowLeft } from "lucide-react"
+import { Star, MapPin, ArrowLeft, Award } from "lucide-react"
 import { slugify } from "@/lib/utils"
+import { AMSPathwayModal } from "@/components/ams-pathway-modal"
 
 // Generate all possible combinations of state_abbr and city_slug
 export async function generateStaticParams({ params }: { params: { state_abbr: string } }) {
@@ -72,13 +73,26 @@ export default async function CityPage(props: { params: { state_abbr: string, ci
           </p>
         ) : (
           schools.map((school) => (
-            <Link 
-              key={school.id} 
-              href={`/schools/${state_abbr}/${city_slug}/${school.slug}`}
-            >
+            <div key={school.id} className="group">
               <Card className="h-full hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
-                  <h2 className="text-xl font-bold mb-2 text-emerald-700">{school.name}</h2>
+                  <div className="flex items-center justify-between mb-2">
+                    <Link href={`/schools/${state_abbr}/${city_slug}/${school.slug}`}>
+                      <h2 className="text-xl font-bold text-emerald-700 group-hover:text-emerald-800">{school.name}</h2>
+                    </Link>
+                    
+                    {/* Display AMS Pathway badge if available */}
+                    {school.ams_pathway_stage && (
+                      <div className="relative">
+                        <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded">
+                          {school.ams_pathway_stage}
+                        </span>
+                        <div className="absolute top-0 right-0 transform translate-x-full ml-2">
+                          <AMSPathwayModal currentStage={school.ams_pathway_stage} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   <div className="flex items-center text-gray-500 mb-2">
                     <MapPin className="h-4 w-4 mr-1" />
@@ -105,12 +119,15 @@ export default async function CityPage(props: { params: { state_abbr: string, ci
 
                   <p className="text-gray-600 line-clamp-3 mb-3">{school.description || "No description available."}</p>
 
-                  <div className="text-emerald-600 hover:text-emerald-700 text-sm font-medium">
+                  <Link 
+                    href={`/schools/${state_abbr}/${city_slug}/${school.slug}`}
+                    className="text-emerald-600 hover:text-emerald-700 text-sm font-medium"
+                  >
                     View School Details →
-                  </div>
+                  </Link>
                 </CardContent>
               </Card>
-            </Link>
+            </div>
           ))
         )}
       </div>

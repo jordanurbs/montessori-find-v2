@@ -2,19 +2,20 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { getAllStateAbbrs, getSchoolsByStateAbbr, getStates } from "@/lib/supabase"
 import { Card, CardContent } from "@/components/ui/card"
-import { Star, MapPin, ArrowLeft } from "lucide-react"
+import { Star, MapPin, ArrowLeft, Award } from "lucide-react"
 import { slugify } from "@/lib/utils"
+import { AMSPathwayModal } from "@/components/ams-pathway-modal"
 
 export async function generateStaticParams() {
-  const stateAbbrs = await getAllStateAbbrs()
-  return stateAbbrs.map((item) => ({
-    state_abbr: item.state_abbr.toLowerCase(),
-  }))
+  const stateParams = await getAllStateAbbrs()
+  return stateParams
 }
 
 export default async function StatePage(props: { params: { state_abbr: string } }) {
   const { state_abbr } = props.params
+  
   const stateAbbr = state_abbr.toUpperCase()
+  
   const states = await getStates()
   const state = states.find((s) => s.state_abbr === stateAbbr)
 
@@ -26,14 +27,17 @@ export default async function StatePage(props: { params: { state_abbr: string } 
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <Link href="/browse" className="inline-flex items-center text-emerald-600 hover:text-emerald-700 mb-6">
+      <Link 
+        href="/" 
+        className="inline-flex items-center text-emerald-600 hover:text-emerald-700 mb-6"
+      >
         <ArrowLeft className="h-4 w-4 mr-2" />
-        Back to Browse
+        Back to States
       </Link>
 
       <h1 className="text-3xl font-bold mb-2">Montessori Schools in {state.state}</h1>
       <p className="text-gray-600 mb-8">
-        Showing {schools.length} Montessori schools in {state.state}
+        Showing {schools.length} Montessori {schools.length === 1 ? 'school' : 'schools'} in {state.state}
       </p>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -43,13 +47,26 @@ export default async function StatePage(props: { params: { state_abbr: string } 
           </p>
         ) : (
           schools.map((school) => (
-            <Link 
-              key={school.id} 
-              href={`/schools/${state_abbr}/${slugify(school.city)}/${school.slug}`}
-            >
+            <div key={school.id} className="group">
               <Card className="h-full hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
-                  <h2 className="text-xl font-bold mb-2 text-emerald-700">{school.name}</h2>
+                  <div className="flex items-center justify-between mb-2">
+                    <Link href={`/schools/${state_abbr}/${slugify(school.city)}/${school.slug}`}>
+                      <h2 className="text-xl font-bold text-emerald-700 group-hover:text-emerald-800">{school.name}</h2>
+                    </Link>
+                    
+                    {/* Display AMS Pathway badge if available */}
+                    {school.ams_pathway_stage && (
+                      <div className="relative">
+                        <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded">
+                          {school.ams_pathway_stage}
+                        </span>
+                        <div className="absolute top-0 right-0 transform translate-x-full ml-2">
+                          <AMSPathwayModal currentStage={school.ams_pathway_stage} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   <div className="flex items-center text-gray-500 mb-2">
                     <MapPin className="h-4 w-4 mr-1" />
@@ -76,12 +93,15 @@ export default async function StatePage(props: { params: { state_abbr: string } 
 
                   <p className="text-gray-600 line-clamp-3 mb-3">{school.description || "No description available."}</p>
 
-                  <div className="text-emerald-600 hover:text-emerald-700 text-sm font-medium">
+                  <Link 
+                    href={`/schools/${state_abbr}/${slugify(school.city)}/${school.slug}`}
+                    className="text-emerald-600 hover:text-emerald-700 text-sm font-medium"
+                  >
                     View School Details →
-                  </div>
+                  </Link>
                 </CardContent>
               </Card>
-            </Link>
+            </div>
           ))
         )}
       </div>

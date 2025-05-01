@@ -57,6 +57,18 @@ export type School = {
   ams_pathway_stage: string | null
   detail_page_url: string | null
   social_media_links: string | null
+  zip?: string
+  age_range?: string
+  features?: any[]
+  hours_of_operation?: {
+    monday: string
+    tuesday: string
+    wednesday: string
+    thursday: string
+    friday: string
+    saturday: string
+    sunday: string
+  }
 }
 
 export type Review = {
