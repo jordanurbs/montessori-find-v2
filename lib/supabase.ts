@@ -54,6 +54,9 @@ export type School = {
   created_at: string
   updated_at: string
   slug: string
+  ams_pathway_stage: string | null
+  detail_page_url: string | null
+  social_media_links: string | null
 }
 
 export type Review = {

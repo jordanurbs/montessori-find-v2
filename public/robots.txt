@@ -1,0 +1,6 @@
+# MontessoriFind robots.txt
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://montessorifind.com/sitemap.xml 

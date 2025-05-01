@@ -1,12 +1,15 @@
 import type React from "react"
 import "./globals.css"
 import Link from "next/link"
-import { School } from "lucide-react"
+import Image from "next/image"
 
 export const metadata = {
   title: "MontessoriFind - Find the Best Montessori Schools",
   description: "Your trusted resource for finding the best Montessori schools.",
-    generator: 'v0.dev'
+    generator: 'v0.dev',
+    openGraph: {
+      images: ['/assets/graphics/og-image.jpg'],
+    }
 }
 
 export default function RootLayout({
@@ -20,7 +23,7 @@ export default function RootLayout({
         <header className="border-b">
           <div className="container mx-auto px-4 py-4 flex justify-between items-center">
             <Link href="/" className="flex items-center space-x-2">
-              <School className="h-6 w-6 text-emerald-600" />
+              <Image src="/montessorifindicon.svg" alt="MontessoriFind Logo" width={24} height={24} className="text-emerald-600" />
               <span className="text-xl font-bold text-emerald-600">MontessoriFind</span>
             </Link>
 

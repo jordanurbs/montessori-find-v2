@@ -15,7 +15,9 @@ export async function generateStaticParams() {
 export default async function SchoolPage(props: { 
   params: { state_abbr: string, city_slug: string, school_slug: string } 
 }) {
-  const { state_abbr, city_slug, school_slug } = props.params
+  // Fix to ensure we properly await the params
+  const params = await Promise.resolve(props.params);
+  const { state_abbr, city_slug, school_slug } = params;
   
   // Get school data by slug parameters
   const school = await getSchoolBySlugs(state_abbr, city_slug, school_slug)

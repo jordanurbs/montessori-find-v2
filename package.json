@@ -10,7 +10,15 @@
     "test:seo": "tsx scripts/test-seo.ts",
     "test:navigation": "tsx scripts/test-navigation.ts",
     "test:performance": "tsx scripts/test-performance.ts",
-    "test": "npm run test:seo && npm run test:navigation && npm run test:performance"
+    "test": "npm run test:seo && npm run test:navigation && npm run test:performance",
+    "test:unit": "vitest run",
+    "test:ui": "vitest --ui",
+    "blog:new": "tsx scripts/create-new-blog-post.ts",
+    "blog:fix": "tsx scripts/add-frontmatter-to-blog-posts.ts",
+    "blog:format": "tsx scripts/fix-blog-post-formatting.ts",
+    "blog:tables": "tsx scripts/fix-blog-tables.ts",
+    "blog:fix-table": "tsx scripts/fix-problem-table.ts",
+    "blog:ctas": "tsx scripts/fix-blog-ctas.ts"
   },
   "dependencies": {
     "@googlemaps/js-api-loader": "latest",
@@ -49,6 +57,7 @@
     "cmdk": "1.0.4",
     "date-fns": "4.1.0",
     "embla-carousel-react": "8.5.1",
+    "gray-matter": "^4.0.3",
     "input-otp": "1.4.1",
     "lucide-react": "^0.454.0",
     "next": "15.2.4",
@@ -59,6 +68,8 @@
     "react-hook-form": "^7.54.1",
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.0",
+    "remark": "^15.0.1",
+    "remark-html": "^16.0.1",
     "sonner": "^1.7.1",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
@@ -66,17 +77,23 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@types/jest": "^29.5.14",
     "@types/node": "^22.15.3",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/ui": "^3.1.2",
     "cheerio": "^1.0.0",
     "dotenv": "^16.5.0",
+    "jest": "^29.7.0",
     "node-fetch": "^3.3.2",
     "postcss": "^8",
     "tailwindcss": "^3.4.17",
+    "ts-jest": "^29.3.2",
     "ts-node": "^10.9.2",
     "tsx": "^4.19.3",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.1.2"
   },
-  "packageManager": "pnpm@10.3.0+sha512.ee592eda8815a8a293c206bb0917c4bb0ff274c50def7cbc17be05ec641fc2d1b02490ce660061356bd0d126a4d7eb2ec8830e6959fb8a447571c631d5a2442d"
+  "packageManager": "pnpm@10.3.0+sha512.ee592eda8815a8a293c206bb0917c4bb0ff274c50def7cbc17be05ec641fc2d1b02490ce660061356bd0d126a4d7eb2ec8830e6959fb8a447571c631d5a2442d",
+  "type": "module"
 }
