@@ -5,18 +5,33 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Star, MapPin, ArrowLeft, Award } from "lucide-react"
 import { slugify } from "@/lib/utils"
 import { AMSPathwayModal } from "@/components/ams-pathway-modal"
+import { supabase } from "@/lib/supabase"
 
 // Generate all possible combinations of state_abbr and city_slug
-export async function generateStaticParams({ params }: { params: { state_abbr: string } }) {
-  if (!params || !params.state_abbr) {
-    console.error("Missing state_abbr in params for [city_slug] generateStaticParams");
-    return [];
+export async function generateStaticParams() {
+  // Get all state abbreviations
+  const { data: states } = await supabase
+    .from("distinct_states_view")
+    .select("state_abbr")
+    
+  if (!states) return [];
+  
+  // For each state, get its cities and create the params
+  const params = [];
+  
+  for (const state of states) {
+    const cityParams = await getCitySlugsByStateAbbr(state.state_abbr);
+    
+    // Add state_abbr to each city param
+    const stateParams = cityParams.map(city => ({
+      state_abbr: state.state_abbr.toLowerCase(),
+      ...city
+    }));
+    
+    params.push(...stateParams);
   }
   
-  // Get all city slugs for this state
-  const cityParams = await getCitySlugsByStateAbbr(params.state_abbr.toUpperCase())
-  
-  return cityParams
+  return params;
 }
 
 export default async function CityPage(props: { params: { state_abbr: string, city_slug: string } }) {

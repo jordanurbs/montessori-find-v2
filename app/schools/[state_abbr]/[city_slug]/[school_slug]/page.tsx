@@ -18,7 +18,22 @@ function parseSocialMediaLinks(socialMediaLinksJson: string | null) {
   if (!socialMediaLinksJson) return [];
   
   try {
-    // Try parsing the JSON
+    // Check if the string starts with http, meaning it's a direct URL and not JSON
+    if (socialMediaLinksJson.trim().startsWith('http')) {
+      // It's a URL, not JSON - create a simple object with the URL
+      const url = socialMediaLinksJson.trim();
+      // Try to detect the platform from the URL
+      let platform = 'website';
+      if (url.includes('facebook.com')) platform = 'Facebook';
+      else if (url.includes('twitter.com') || url.includes('x.com')) platform = 'Twitter';
+      else if (url.includes('instagram.com')) platform = 'Instagram';
+      else if (url.includes('youtube.com')) platform = 'YouTube';
+      else if (url.includes('linkedin.com')) platform = 'LinkedIn';
+      
+      return [{ platform, url }];
+    }
+    
+    // Otherwise try parsing as JSON
     const socialLinks = JSON.parse(socialMediaLinksJson);
     
     // Return an array of parsed links if valid
@@ -32,6 +47,19 @@ function parseSocialMediaLinks(socialMediaLinksJson: string | null) {
     return [];
   } catch (error) {
     console.error("Error parsing social media links:", error);
+    // If JSON parsing fails, try to handle it as a plain string
+    const url = socialMediaLinksJson.trim();
+    if (url.startsWith('http')) {
+      // Determine platform from URL if possible
+      let platform = 'website';
+      if (url.includes('facebook.com')) platform = 'Facebook';
+      else if (url.includes('twitter.com') || url.includes('x.com')) platform = 'Twitter';
+      else if (url.includes('instagram.com')) platform = 'Instagram';
+      else if (url.includes('youtube.com')) platform = 'YouTube';
+      else if (url.includes('linkedin.com')) platform = 'LinkedIn';
+      
+      return [{ platform, url }];
+    }
     return [];
   }
 }

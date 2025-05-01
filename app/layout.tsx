@@ -4,12 +4,23 @@ import Link from "next/link"
 import Image from "next/image"
 
 export const metadata = {
-  title: "MontessoriFind - Find the Best Montessori Schools",
-  description: "Your trusted resource for finding the best Montessori schools.",
-    generator: 'v0.dev',
-    openGraph: {
-      images: ['/assets/graphics/og-image.jpg'],
-    }
+  metadataBase: new URL('https://montessorifind.com'),
+  title: {
+    default: 'MontessoriFind - Find Montessori Schools Near You',
+    template: '%s | MontessoriFind'
+  },
+  description: 'Search for Montessori schools in your area. Find details, reviews, and information about Montessori education options near you.',
+  keywords: ['montessori', 'school', 'education', 'learning', 'directory', 'find', 'search', 'preschool', 'elementary'],
+  authors: [{ name: 'MontessoriFind Team' }],
+  creator: 'MontessoriFind',
+  publisher: 'MontessoriFind',
+  openGraph: {
+    images: ['/assets/graphics/og-image.jpg'],
+  },
+  robots: {
+    index: true,
+    follow: true
+  }
 }
 
 export default function RootLayout({
