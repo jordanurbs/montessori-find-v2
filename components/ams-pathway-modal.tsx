@@ -120,7 +120,8 @@ export function AMSPathwayModal({ currentStage }: AMSPathwayModalProps) {
           <div className="mt-6 p-4 bg-amber-50 rounded-lg">
             <p className="italic text-amber-900">
               Note: The AMS pathway reflects a school's commitment to maintaining high standards of Montessori education. 
-              For more detailed information, visit the <a href="https://amshq.org/Educators/Montessori-Schools/AMS-Membership/Types-of-Memberships" target="_blank" rel="noopener noreferrer" className="text-amber-700 hover:text-amber-900 underline">American Montessori Society website</a>.
+              For more detailed information, visit the <a href="https://amshq.org/" target="_blank" rel="noopener noreferrer" className="text-amber-700 hover:text-amber-900 underline">American Montessori Society</a> website.
+              (MontessoriFind is not affiliated with the AMS.)
             </p>
           </div>
         </div>

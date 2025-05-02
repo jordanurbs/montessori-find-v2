@@ -166,11 +166,7 @@ export default function RootLayout({
                       Frequently Asked Questions
                     </Link>
                   </li>
-                  <li>
-                    <Link href="/contact" className="hover:text-emerald-400">
-                      Contact Us
-                    </Link>
-                  </li>
+  
                 </ul>
               </div>
 
