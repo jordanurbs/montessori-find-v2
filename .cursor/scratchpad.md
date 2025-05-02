@@ -131,6 +131,7 @@ This requires implementing state/city landing pages and using slugs instead of I
     * Added corresponding npm scripts in package.json to run individual tests or all tests with a single command.
 *   **Previous Issue (Task 12.2)**: Encountered a deployment error on Netlify due to mismatch between package.json and pnpm-lock.yaml. The error shows that Netlify's CI environment is using `--frozen-lockfile` by default, but our lock file is out of sync with package.json. Need to regenerate the lock file and push the changes to resolve this deployment blocker.
 *   **Fixed Task 12.3** (Netlify Build Error): Fixed a critical build error on Netlify that was failing with `TypeError: e.trim is not a function` during static page generation. The issue was in the social media links parsing function in the school page component. The error occurred when trying to apply `trim()` on potential null or non-string values. Updated the `parseSocialMediaLinks` function to add proper type checking before calling `trim()` and improved the handling of direct URL strings vs. JSON data. This fix ensures the application builds successfully on Netlify.
+*   [x] **AMS verification details commented out on school listings and detail pages**
 
 ## Lessons
 
@@ -256,6 +257,7 @@ The goal is to add a dynamic, SEO-friendly blog section to the Montessori Find V
   - Newsletter signup section at the bottom of post pages
   - Automatic tag extraction (with fallbacks if not specified in frontmatter)
   - Consistent green color scheme matching the site's brand
+*   AMS verification details (AMSPathwayModal, ams_pathway_stage, and related UI) have been commented out on the school listings and detail pages. The code is still present for easy restoration later. No AMS details should now appear to users.
 
 ## Lessons (Blog Feature)
 

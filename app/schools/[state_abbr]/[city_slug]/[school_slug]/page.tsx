@@ -164,7 +164,7 @@ export default async function SchoolPage(props: {
             )}
             
             {/* Display AMS Pathway Stage if available with Modal */}
-            {school.ams_pathway_stage && (
+            {school && false && school.ams_pathway_stage && (
               <div className="mt-2 flex items-center gap-2">
                 <span className="bg-blue-100 text-blue-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded">
                   {school.detail_page_url ? (
@@ -175,7 +175,7 @@ export default async function SchoolPage(props: {
                     school.ams_pathway_stage
                   )}
                 </span>
-                <AMSPathwayModal currentStage={school.ams_pathway_stage} />
+                <AMSPathwayModal currentStage={school.ams_pathway_stage ?? undefined} />
               </div>
             )}
           </div>
@@ -332,11 +332,11 @@ export default async function SchoolPage(props: {
           </Card>
 
           {/* Additional Pathway Information with Modal link */}
-          {school.ams_pathway_stage && school.detail_page_url && (
+          {school && false && school.ams_pathway_stage && school.detail_page_url && (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Additional Information</CardTitle>
-                <AMSPathwayModal currentStage={school.ams_pathway_stage} />
+                <AMSPathwayModal currentStage={school.ams_pathway_stage ?? undefined} />
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
