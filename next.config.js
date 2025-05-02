@@ -75,9 +75,9 @@ const nextConfig = {
     ]
   },
   
-  // Ensure production-focused asset optimization
+  // Ensure production-focused asset optimization - but remove problematic features
   experimental: {
-    optimizeCss: true,
+    // Remove optimizeCss that's causing the 'critters' dependency issue
     optimizePackageImports: ['lucide-react'],
   },
   
