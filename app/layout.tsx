@@ -2,6 +2,7 @@ import type React from "react"
 import "./globals.css"
 import Link from "next/link"
 import Image from "next/image"
+import Head from "next/head"
 
 export const metadata = {
   metadataBase: new URL('https://montessorifind.com'),
@@ -30,6 +31,93 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <link rel="stylesheet" href="/styles.css" />
+        <style dangerouslySetInnerHTML={{ __html: `
+          body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+          }
+          .container {
+            width: 100%;
+            margin-right: auto;
+            margin-left: auto;
+            padding-left: 1rem;
+            padding-right: 1rem;
+          }
+          @media (min-width: 640px) {
+            .container {
+              max-width: 640px;
+            }
+          }
+          @media (min-width: 768px) {
+            .container {
+              max-width: 768px;
+            }
+          }
+          @media (min-width: 1024px) {
+            .container {
+              max-width: 1024px;
+            }
+          }
+          .flex {
+            display: flex;
+          }
+          .flex-col {
+            flex-direction: column;
+          }
+          .min-h-screen {
+            min-height: 100vh;
+          }
+          .items-center {
+            align-items: center;
+          }
+          .justify-between {
+            justify-content: space-between;
+          }
+          .text-emerald-600 {
+            color: rgb(5, 150, 105);
+          }
+          .border-b {
+            border-bottom-width: 1px;
+            border-bottom-style: solid;
+            border-color: #e5e7eb;
+          }
+          .hidden {
+            display: none;
+          }
+          @media (min-width: 768px) {
+            .md\\:flex {
+              display: flex;
+            }
+          }
+          .bg-gray-900 {
+            background-color: #111827;
+          }
+          .text-white {
+            color: white;
+          }
+          .py-12 {
+            padding-top: 3rem;
+            padding-bottom: 3rem;
+          }
+          .grid {
+            display: grid;
+          }
+          @media (min-width: 768px) {
+            .md\\:grid-cols-4 {
+              grid-template-columns: repeat(4, minmax(0, 1fr));
+            }
+          }
+          .gap-8 {
+            gap: 2rem;
+          }
+          .flex-1 {
+            flex: 1 1 0%;
+          }
+        ` }} />
+      </head>
       <body className="min-h-screen flex flex-col">
         <header className="border-b">
           <div className="container mx-auto px-4 py-4 flex justify-between items-center">

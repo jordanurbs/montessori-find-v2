@@ -8,6 +8,15 @@ const nextConfig = {
     ignoreBuildErrors: true, // Disable TypeScript checking during build
   },
   output: 'standalone',
+  
+  // Ensure CSS is handled correctly
+  optimizeFonts: true,
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production' ? {
+      exclude: ['error', 'warn'],
+    } : false,
+  },
+  
   // Add redirects for pages that might exist in Google's index
   async redirects() {
     return [
@@ -65,6 +74,15 @@ const nextConfig = {
       // Add more redirects as needed
     ]
   },
+  
+  // Ensure production-focused asset optimization
+  experimental: {
+    optimizeCss: true,
+    optimizePackageImports: ['lucide-react'],
+  },
+  
+  // Generate a static export for better CSS handling
+  trailingSlash: true,
 }
 
 module.exports = nextConfig 
