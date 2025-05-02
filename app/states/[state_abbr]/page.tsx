@@ -71,21 +71,24 @@ export default async function StatePage(props: { params: { state_abbr: string } 
             const cityName = slugToCityName(city_slug)
             const count = getCountBySlug(city_slug)
             return (
-              <Card key={city_slug} className="h-full hover:shadow-md transition-shadow">
-                <CardContent className="p-6 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-5 w-5 text-emerald-600" />
-                    <span className="text-lg font-semibold">{cityName}</span>
-                    <span className="ml-2 text-gray-500 text-sm">({count} {count === 1 ? 'school' : 'schools'})</span>
-                  </div>
-                  <Link 
-                    href={`/states/${state_abbr}/${city_slug}`}
-                    className="text-emerald-600 hover:text-emerald-700 text-sm font-medium ml-4"
-                  >
-                    View Schools →
-                  </Link>
-                </CardContent>
-              </Card>
+              <Link
+                key={city_slug}
+                href={`/states/${state_abbr}/${city_slug}`}
+                className="block group"
+                style={{ textDecoration: 'none' }}
+              >
+                <Card
+                  className="h-32 flex items-center justify-center border border-gray-200 rounded-xl transition-shadow duration-200 cursor-pointer group-hover:shadow-lg"
+                >
+                  <CardContent className="flex flex-col items-center justify-center w-full h-full p-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <MapPin className="h-6 w-6 text-emerald-600" />
+                      <span className="text-xl font-bold text-gray-900">{cityName}</span>
+                    </div>
+                    <span className="text-gray-500 text-base font-medium mt-1">{count} {count === 1 ? 'school' : 'schools'}</span>
+                  </CardContent>
+                </Card>
+              </Link>
             )
           })
         )}

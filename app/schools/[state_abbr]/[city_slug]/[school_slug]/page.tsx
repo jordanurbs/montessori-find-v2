@@ -214,7 +214,6 @@ export default async function SchoolPage(props: {
                     <CardContent className="pt-6">
                       <div className="flex items-center justify-between mb-2">
                         <div className="font-semibold">{review.author}</div>
-                        <div className="text-sm text-gray-500">{new Date(review.created_at).toLocaleDateString()}</div>
                       </div>
                       <div className="flex mb-3">
                         {[...Array(5)].map((_, i) => (
