@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "npx tailwindcss -i ./app/globals.css -o ./.next/static/css/tailwind.css",
     "start": "next start",
     "lint": "next lint",
     "test:seo": "tsx scripts/test-seo.ts",

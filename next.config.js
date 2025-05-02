@@ -7,6 +7,7 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true, // Disable TypeScript checking during build
   },
+  output: 'standalone',
   // Add redirects for pages that might exist in Google's index
   async redirects() {
     return [

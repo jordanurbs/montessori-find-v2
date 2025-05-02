@@ -104,7 +104,7 @@ This requires implementing state/city landing pages and using slugs instead of I
 *   [ ] **12. Deployment**
     *   [x] 12.1 Configure Netlify deployment settings
     *   [ ] 12.2 Fix pnpm-lock.yaml and package.json mismatch issue
-    *   [ ] 12.3 Complete successful Netlify deployment
+    *   [x] 12.3 Complete successful Netlify deployment
 *   [ ] **13. Monitoring & Rollout**
 
 ## Executor's Feedback or Assistance Requests
@@ -129,7 +129,8 @@ This requires implementing state/city landing pages and using slugs instead of I
     * Created `scripts/test-navigation.ts` to crawl the site and validate that all internal links follow our slug-based URL structure.
     * Created `scripts/test-performance.ts` to measure loading times, page size, and number of requests with configurable thresholds.
     * Added corresponding npm scripts in package.json to run individual tests or all tests with a single command.
-*   **Current Issue (Task 12.2)**: Encountered a deployment error on Netlify due to mismatch between package.json and pnpm-lock.yaml. The error shows that Netlify's CI environment is using `--frozen-lockfile` by default, but our lock file is out of sync with package.json. Need to regenerate the lock file and push the changes to resolve this deployment blocker.
+*   **Previous Issue (Task 12.2)**: Encountered a deployment error on Netlify due to mismatch between package.json and pnpm-lock.yaml. The error shows that Netlify's CI environment is using `--frozen-lockfile` by default, but our lock file is out of sync with package.json. Need to regenerate the lock file and push the changes to resolve this deployment blocker.
+*   **Fixed Task 12.3** (Netlify Build Error): Fixed a critical build error on Netlify that was failing with `TypeError: e.trim is not a function` during static page generation. The issue was in the social media links parsing function in the school page component. The error occurred when trying to apply `trim()` on potential null or non-string values. Updated the `parseSocialMediaLinks` function to add proper type checking before calling `trim()` and improved the handling of direct URL strings vs. JSON data. This fix ensures the application builds successfully on Netlify.
 
 ## Lessons
 
@@ -145,7 +146,8 @@ This requires implementing state/city landing pages and using slugs instead of I
 *   When implementing automated tests for SEO, focus on key elements that search engines prioritize: title tags, meta descriptions, heading structure, and canonical URLs.
 *   For testing URL structures in a Next.js application, regular expressions provide a flexible way to define and validate URL patterns across the entire site.
 *   Simple performance testing can be done with fetch and measuring response time, but real-world performance depends on many factors like network conditions, browser rendering, and client-side JavaScript execution.
-*   When deploying to Netlify with pnpm, make sure the pnpm-lock.yaml file is always in sync with package.json to avoid CI build failures, as Netlify uses `--frozen-lockfile` by default. 
+*   When deploying to Netlify with pnpm, make sure the pnpm-lock.yaml file is always in sync with package.json to avoid CI build failures, as Netlify uses `--frozen-lockfile` by default.
+*   Always add null and type checks before calling methods like `trim()` on values that might come from external sources (like a database). For social media links or URLs, validate that the value is a string before processing it.
 
 ---
 
