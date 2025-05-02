@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { getSchoolBySlugs, getReviewsBySchoolSlugs, getSchoolSlugParams } from "@/lib/supabase"
-import { GoogleMap } from "@/components/google-map"
+import { SecureGoogleMap } from "@/components/secure-google-map"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -197,7 +197,7 @@ export default async function SchoolPage(props: {
                   <CardTitle>Location</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <GoogleMap address={fullAddress} markerTitle={school.name} height="300px" />
+                  <SecureGoogleMap address={fullAddress} markerTitle={school.name} height="300px" />
                 </CardContent>
               </Card>
             </TabsContent>

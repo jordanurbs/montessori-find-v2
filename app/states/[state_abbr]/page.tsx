@@ -1,10 +1,8 @@
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { getAllStateAbbrs, getSchoolsByStateAbbr, getStates } from "@/lib/supabase"
+import { getAllStateAbbrs, getStates, getCitySlugsByStateAbbr, getSchoolsByStateAbbr } from "@/lib/supabase"
 import { Card, CardContent } from "@/components/ui/card"
-import { Star, MapPin, ArrowLeft, Award } from "lucide-react"
-import { slugify } from "@/lib/utils"
-import { AMSPathwayModal } from "@/components/ams-pathway-modal"
+import { MapPin, ArrowLeft } from "lucide-react"
 
 export async function generateStaticParams() {
   const stateAbbrs = await getAllStateAbbrs()
@@ -15,9 +13,7 @@ export async function generateStaticParams() {
 
 export default async function StatePage(props: { params: { state_abbr: string } }) {
   const { state_abbr } = props.params
-  
   const stateAbbr = state_abbr.toUpperCase()
-  
   const states = await getStates()
   const state = states.find((s) => s.state_abbr === stateAbbr)
 
@@ -25,7 +21,30 @@ export default async function StatePage(props: { params: { state_abbr: string } 
     notFound()
   }
 
+  // Fetch unique cities for this state
+  const citySlugs = await getCitySlugsByStateAbbr(stateAbbr)
+  // Fetch all schools for this state
   const schools = await getSchoolsByStateAbbr(stateAbbr)
+  // Group schools by city and count
+  const citySchoolCounts: Record<string, number> = {}
+  for (const school of schools) {
+    if (!school.city) continue
+    citySchoolCounts[school.city] = (citySchoolCounts[school.city] || 0) + 1
+  }
+  // Helper to get city name from slug
+  const slugToCityName = (slug: string) =>
+    slug
+      .replace(/-/g, ' ')
+      .replace(/\b\w/g, l => l.toUpperCase())
+  // Helper to get count by slug
+  const getCountBySlug = (slug: string) => {
+    // Find the city name in the schools list that matches this slug
+    const match = Object.keys(citySchoolCounts).find(city =>
+      city &&
+      city.toLowerCase().replace(/\s+/g, '-').replace(/[^\w\-]+/g, '').replace(/\-\-+/g, '-').replace(/^-+/, '').replace(/-+$/, '') === slug
+    )
+    return match ? citySchoolCounts[match] : 0
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -37,74 +56,38 @@ export default async function StatePage(props: { params: { state_abbr: string } 
         Back to States
       </Link>
 
-      <h1 className="text-3xl font-bold mb-2">Montessori Schools in {state.state}</h1>
+      <h1 className="text-3xl font-bold mb-2">Montessori Cities in {state.state}</h1>
       <p className="text-gray-600 mb-8">
-        Showing {schools.length} Montessori {schools.length === 1 ? 'school' : 'schools'} in {state.state}
+        Showing {citySlugs.length} {citySlugs.length === 1 ? 'city' : 'cities'} in {state.state}
       </p>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {schools.length === 0 ? (
+        {citySlugs.length === 0 ? (
           <p className="col-span-full text-center py-12 text-gray-500">
-            No schools found in {state.state}. Please check back later.
+            No cities found in {state.state}. Please check back later.
           </p>
         ) : (
-          schools.map((school) => (
-            <div key={school.id} className="group">
-              <Card className="h-full hover:shadow-md transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <Link href={`/schools/${state_abbr}/${slugify(school.city)}/${school.slug}`}>
-                      <h2 className="text-xl font-bold text-emerald-700 group-hover:text-emerald-800">{school.name}</h2>
-                    </Link>
-                    
-                    {/* Display AMS Pathway badge if available */}
-                    {school.ams_pathway_stage && (
-                      <div className="relative">
-                        <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded">
-                          {school.ams_pathway_stage}
-                        </span>
-                        <div className="absolute top-0 right-0 transform translate-x-full ml-2">
-                          <AMSPathwayModal currentStage={school.ams_pathway_stage} />
-                        </div>
-                      </div>
-                    )}
+          citySlugs.map(({ city_slug }) => {
+            const cityName = slugToCityName(city_slug)
+            const count = getCountBySlug(city_slug)
+            return (
+              <Card key={city_slug} className="h-full hover:shadow-md transition-shadow">
+                <CardContent className="p-6 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-5 w-5 text-emerald-600" />
+                    <span className="text-lg font-semibold">{cityName}</span>
+                    <span className="ml-2 text-gray-500 text-sm">({count} {count === 1 ? 'school' : 'schools'})</span>
                   </div>
-
-                  <div className="flex items-center text-gray-500 mb-2">
-                    <MapPin className="h-4 w-4 mr-1" />
-                    <span>
-                      {school.city}, {state.state_abbr}
-                    </span>
-                  </div>
-
-                  {school.rating > 0 && (
-                    <div className="flex items-center mb-3">
-                      {[...Array(5)].map((_, i) => (
-                        <Star
-                          key={i}
-                          className={`h-4 w-4 ${
-                            i < Math.round(school.rating) ? "text-amber-400 fill-amber-400" : "text-gray-300"
-                          }`}
-                        />
-                      ))}
-                      <span className="ml-2 text-sm text-gray-600">
-                        {school.rating.toFixed(1)} ({school.total_ratings})
-                      </span>
-                    </div>
-                  )}
-
-                  <p className="text-gray-600 line-clamp-3 mb-3">{school.description || "No description available."}</p>
-
                   <Link 
-                    href={`/schools/${state_abbr}/${slugify(school.city)}/${school.slug}`}
-                    className="text-emerald-600 hover:text-emerald-700 text-sm font-medium"
+                    href={`/states/${state_abbr}/${city_slug}`}
+                    className="text-emerald-600 hover:text-emerald-700 text-sm font-medium ml-4"
                   >
-                    View School Details →
+                    View Schools →
                   </Link>
                 </CardContent>
               </Card>
-            </div>
-          ))
+            )
+          })
         )}
       </div>
     </div>

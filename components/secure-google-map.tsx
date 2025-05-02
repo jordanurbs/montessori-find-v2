@@ -71,14 +71,19 @@ export function SecureGoogleMap({ address, height = "400px", zoom = 15, markerTi
   const [debug, setDebug] = useState<string | null>(null)
   const [useFallback, setUseFallback] = useState(false)
   const [geocodeData, setGeocodeData] = useState<any>(null)
+  const [mapRequested, setMapRequested] = useState(false)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    if (!mapRequested) return;
+    setLoading(true);
     // Add console logging for debugging
     console.log("SecureGoogleMap component mounted", { address, zoom, markerTitle })
     
     // Check if we're running on the client side
     if (typeof window === 'undefined') {
       console.log("Not running on client side, skipping map load");
+      setLoading(false);
       return;
     }
 
@@ -88,6 +93,7 @@ export function SecureGoogleMap({ address, height = "400px", zoom = 15, markerTi
         if (!address) {
           setError("No address provided");
           setUseFallback(true);
+          setLoading(false);
           return;
         }
 
@@ -113,6 +119,7 @@ export function SecureGoogleMap({ address, height = "400px", zoom = 15, markerTi
         setError(`Failed to geocode address: ${err.message}`);
         setDebug(`Address: "${address}", Error: ${err.message}`);
         setUseFallback(true);
+        setLoading(false);
       }
     };
 
@@ -121,6 +128,7 @@ export function SecureGoogleMap({ address, height = "400px", zoom = 15, markerTi
       if (!isLoaded) {
         console.log("Map loading timeout exceeded, using fallback");
         setUseFallback(true);
+        setLoading(false);
       }
     }, 5000);
 
@@ -133,6 +141,7 @@ export function SecureGoogleMap({ address, height = "400px", zoom = 15, markerTi
       setError("Google Maps API key is missing. Please check environment variables.");
       setDebug("Environment variable NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is not defined.");
       setUseFallback(true);
+      setLoading(false);
       return;
     }
     
@@ -142,6 +151,7 @@ export function SecureGoogleMap({ address, height = "400px", zoom = 15, markerTi
     if (apiKey === "" || apiKey === "your_google_maps_api_key_here") {
       setError("Invalid Google Maps API key. Please set a valid key in environment variables.");
       setUseFallback(true);
+      setLoading(false);
       return;
     }
 
@@ -155,6 +165,7 @@ export function SecureGoogleMap({ address, height = "400px", zoom = 15, markerTi
       .then((google) => {
         console.log("Google Maps API loaded successfully");
         setIsLoaded(true);
+        setLoading(false);
         clearTimeout(timeoutId);
 
         if (mapRef.current && geocodeData) {
@@ -188,17 +199,37 @@ export function SecureGoogleMap({ address, height = "400px", zoom = 15, markerTi
         setError(`Failed to load Google Maps: ${err.message}`);
         setDebug(`Error details: ${JSON.stringify(err)}`);
         setUseFallback(true);
+        setLoading(false);
         clearTimeout(timeoutId);
       });
 
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [address, zoom, markerTitle, isLoaded, geocodeData]);
+  }, [address, zoom, markerTitle, isLoaded, geocodeData, mapRequested]);
 
   // If we need to use the fallback and we have an address, show the static map
   if (useFallback && address) {
     return <StaticMapFallback address={address} height={height} />;
+  }
+
+  // Show the overlay button if map has not been requested yet
+  if (!mapRequested) {
+    return (
+      <div className="w-full rounded-lg overflow-hidden relative" style={{ height }}>
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-100/80 z-10">
+          <button
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 py-3 rounded-lg shadow-lg text-lg transition"
+            onClick={() => setMapRequested(true)}
+            aria-label="Load interactive map"
+          >
+            Load Map
+          </button>
+        </div>
+        {/* No static map preview here, just a blank placeholder */}
+        <div className="w-full h-full bg-gray-100" style={{ height }} />
+      </div>
+    );
   }
 
   return (
@@ -216,6 +247,10 @@ export function SecureGoogleMap({ address, height = "400px", zoom = 15, markerTi
           >
             Try Static Map
           </button>
+        </div>
+      ) : loading ? (
+        <div className="bg-gray-100 flex items-center justify-center" style={{ height }}>
+          <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
         </div>
       ) : !isLoaded && !useFallback ? (
         <div className="bg-gray-100 flex items-center justify-center" style={{ height }}>
