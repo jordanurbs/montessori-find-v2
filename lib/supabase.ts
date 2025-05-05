@@ -69,6 +69,22 @@ export type School = {
     saturday: string
     sunday: string
   }
+  geocode_data?: {
+    formatted_address: string
+    geometry: {
+      location: {
+        lat: number
+        lng: number
+      }
+    }
+    place_id: string
+    types: string[]
+  }
+  static_map_url?: string
+  coordinates?: {
+    lat: number
+    lng: number
+  }
 }
 
 export type Review = {

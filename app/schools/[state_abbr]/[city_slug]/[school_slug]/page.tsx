@@ -197,7 +197,13 @@ export default async function SchoolPage(props: {
                   <CardTitle>Location</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <SecureGoogleMap address={fullAddress} markerTitle={school.name} height="300px" />
+                  {school ? (
+                    <SecureGoogleMap school={school} height="300px" />
+                  ) : (
+                    <div className="h-[300px] flex items-center justify-center bg-gray-100 text-gray-500">
+                      No location information available
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

@@ -265,4 +265,2509 @@ The goal is to add a dynamic, SEO-friendly blog section to the Montessori Find V
 * When dealing with domain-specific content (like Montessori education), adding special handling for common terms and organization names (MACTE, AMI/AMS) improves both SEO and user experience.
 * Using Tailwind's prose plugin with detailed modifiers provides fine-grained control over typography, but custom selectors like `[&_iframe]` may be needed for elements not directly covered.
 * Blog posts that contain tables, especially comparison tables, benefit from enhanced styling beyond what basic Markdown-to-HTML conversion provides.
-* For embedded content like YouTube videos, special handling is required to ensure responsive design and proper styling. 
+* For embedded content like YouTube videos, special handling is required to ensure responsive design and proper styling.
+
+# Background and Motivation
+The project currently uses Netlify functions to proxy Google Maps API requests, which is causing unnecessary costs. We need to reduce Netlify function invocations by pre-generating maps and geocodes at build time.
+
+# Key Challenges and Analysis
+1. The project uses Google Maps in two main ways:
+   - Geocoding addresses to get coordinates
+   - Generating static map images
+2. All school addresses are known at build time
+3. The data is stored in Supabase
+4. The maps are used in:
+   - School detail pages
+   - Map view component
+   - City pages
+
+# High-level Task Breakdown
+
+## Phase 1: Database Schema Updates
+1. Add new columns to schools table:
+   - [x] `geocode_data` (JSONB) - Store geocoding results
+   - [x] `static_map_url` (TEXT) - Store pre-generated static map URL
+   - [x] `coordinates` (JSONB) - Store lat/lng for map markers
+   - [x] Update School type in TypeScript code
+
+## Phase 2: Build-time Generation Script
+1. Create a new script `scripts/generate-maps.ts` that will:
+   - Fetch all schools from Supabase
+   - For each school:
+     - Call Google Maps API to geocode address
+     - Generate static map URL
+     - Update school record in Supabase with new data
+2. Add script to build process in `package.json`
+
+## Phase 3: Update Components
+1. Modify `SecureGoogleMap` component to:
+   - Use pre-generated data instead of making API calls
+   - Fall back to client-side API only if pre-generated data is missing
+2. Update `MapView` component to use pre-generated coordinates
+
+## Phase 4: Testing and Validation
+1. Add tests for new functionality
+2. Verify all map displays work correctly
+3. Test build process with new script
+
+# Project Status Board
+- [x] Database schema updates
+- [ ] Build-time generation script
+- [ ] Component updates
+- [ ] Testing and validation
+
+# Executor's Feedback or Assistance Requests
+Phase 1 (Database Schema Updates) is complete. We have:
+1. Created a SQL migration file (`supabase/migrations/20240321000000_add_map_columns.sql`) with functions to add the new columns
+2. Created a TypeScript script (`scripts/add-map-columns.ts`) to execute the migration
+3. Updated the School type in `lib/supabase.ts` to include the new columns
+
+Next steps:
+1. Run the migration script to add the columns to the database
+2. Proceed with Phase 2 (Build-time Generation Script)
+
+Would you like me to proceed with running the migration script?
+
+# Lessons
+- When adding new columns to a production database, always use idempotent operations (IF NOT EXISTS) to prevent errors if the script is run multiple times
+- For JSONB columns, it's helpful to define the TypeScript types upfront to ensure type safety throughout the application
+
+## Lessons
+
+*(Learnings and reusable patterns will be documented here)*
+*   Use `tsx` instead of `ts-node` for executing TS scripts in modern Node/Next.js projects to avoid module/extension errors.
+*   When updating Supabase records via script, prefer explicit `.update().eq()` over `.upsert()` if encountering unexpected constraint violations, especially if you know the records already exist.
+*   For large datasets in Supabase, always use pagination with `.range()` to avoid hitting the default 1000-record limit.
+*   When creating slug-based routes, having the actual slug stored in the database reduces complexity compared to calculating it on the fly (though we still need to calculate city_slugs).
+*   For URL parameters that need to be case-insensitive (like state abbreviations), standardize on lowercase in URLs (`/states/ca`) but convert to the appropriate case (uppercase) for database queries.
+*   In Next.js App Router, `generateStaticParams` at each route level can work seamlessly with nested dynamic routes to create a hierarchical structure of statically generated pages.
+*   When checking for non-unique slugs, it's better to fetch all matching items and filter them in the application logic rather than using database-level uniqueness constraints, especially when uniqueness depends on combinations of fields.
+*   In Next.js, avoid destructuring route parameters directly in component function parameters. Instead, first access `props.params` as a whole to prevent "params should be awaited before using its properties" warnings.
+*   When implementing automated tests for SEO, focus on key elements that search engines prioritize: title tags, meta descriptions, heading structure, and canonical URLs.
+*   For testing URL structures in a Next.js application, regular expressions provide a flexible way to define and validate URL patterns across the entire site.
+*   Simple performance testing can be done with fetch and measuring response time, but real-world performance depends on many factors like network conditions, browser rendering, and client-side JavaScript execution.
+*   When deploying to Netlify with pnpm, make sure the pnpm-lock.yaml file is always in sync with package.json to avoid CI build failures, as Netlify uses `--frozen-lockfile` by default.
+*   Always add null and type checks before calling methods like `trim()` on values that might come from external sources (like a database). For social media links or URLs, validate that the value is a string before processing it.
+
+---
+
+# Blog Feature Implementation
+
+## Background and Motivation
+
+The goal is to add a dynamic, SEO-friendly blog section to the Montessori Find V2 website. This leverages existing content provided as Markdown files in the `app/blog` directory. The blog aims to enhance user engagement by providing valuable information to parents searching for Montessori schools, improve site content depth, and contribute positively to SEO. The implementation should utilize Server-Side Rendering (SSR) or Static Site Generation (SSG) principles within the existing Next.js framework and adhere to SEO best practices.
+
+## Key Challenges and Analysis
+
+*   **Technology Choice:** Utilizing the existing Next.js App Router structure is optimal. Libraries like `gray-matter` (for frontmatter parsing) and `remark` with `remark-html` (for Markdown to HTML conversion) are suitable choices.
+*   **Routing:** Need to establish routes for the blog index (`/blog`) and individual posts (`/blog/[slug]`). The slugs will be derived from the Markdown filenames.
+*   **Markdown Processing:**
+    *   A robust function is required to read Markdown files from the `app/blog` directory.
+    *   Extract frontmatter (e.g., `title`, `date`, `description`, `author`, `image`) for metadata.
+    *   Convert Markdown body content to HTML for rendering.
+    *   Handle potential errors during file reading or parsing.
+*   **SEO:**
+    *   Implement dynamic generation of `<title>` and `<meta description>` tags based on frontmatter for both index and post pages.
+    *   Add Open Graph (`og:`) and Twitter Card (`twitter:`) meta tags for social sharing previews.
+    *   Incorporate structured data (Schema.org `BlogPosting`) for individual articles to enhance search engine understanding.
+    *   Ensure clean, descriptive URLs using slugs derived from filenames.
+    *   Consider adding internal linking features (e.g., "Related Posts") in the future.
+    *   Update or generate a `sitemap.xml` to include blog URLs.
+*   **Rendering Strategy:** Static Site Generation (SSG) using `generateStaticParams` (for post pages) and fetching data at build time (for index page) is the preferred approach for a blog with content that doesn't change in real-time. This offers the best performance and SEO benefits.
+*   **Content Structure:** Define a standard frontmatter structure for the Markdown files to ensure consistent metadata extraction (e.g., `title`, `date`, `description`, `author`, `coverImage`).
+*   **UI/UX:** Design and implement simple, clean, and readable layouts for the blog index (list of posts) and individual post pages.
+
+## High-level Task Breakdown
+
+1.  **Standardize Frontmatter & Content:**
+    *   Review existing `.md` files in `app/blog`.
+    *   Define and document a standard frontmatter structure (e.g., `title: string`, `date: YYYY-MM-DD`, `description: string`, `author?: string`, `coverImage?: string`).
+    *   **Action (Manual):** Update all existing `.md` files to conform to this structure. Add placeholder content to `10-benefits-of-montessori-education-for-early-learners.md` if it's meant to be included.
+    *   **Success Criteria:** All `.md` files in `app/blog` have consistent and complete frontmatter.
+2.  **Setup & Dependencies:**
+    *   Install necessary libraries: `npm install gray-matter remark remark-html` (or `pnpm add ...`).
+    *   **Success Criteria:** Dependencies installed successfully.
+3.  **Blog Data Fetching Logic:**
+    *   Create a utility function (e.g., in `lib/blog.ts`) to:
+        *   Read all `.md` files from the `app/blog` directory.
+        *   Parse frontmatter using `gray-matter`.
+        *   Generate a `slug` for each post (from filename).
+        *   Sort posts (e.g., by date descending).
+        *   Provide functions like `getAllPostsData()` (for index) and `getPostData(slug)` (for individual posts, including HTML content generation using `remark`).
+    *   Write unit tests for these utility functions.
+    *   **Success Criteria:** Utility functions correctly read, parse, sort posts, generate slugs, and convert Markdown to HTML. Tests pass.
+4.  **Blog Index Page (`/blog`):**
+    *   Create the route `app/blog/page.tsx`.
+    *   Use the `getAllPostsData()` utility to fetch metadata for all posts (title, slug, date, description) at build time (implicitly SSG in App Router).
+    *   Render a list of blog posts, displaying title, date, description, and linking to `/blog/[slug]`.
+    *   Implement basic page-level SEO: `<title>Blog | Montessori Find</title>`, relevant `<meta description>`.
+    *   Write tests for basic rendering and data display.
+    *   **Success Criteria:** `/blog` page builds statically, displays a list of posts fetched from Markdown files, links correctly, and has basic SEO tags.
+5.  **Blog Post Page (`/blog/[slug]`):**
+    *   Create the dynamic route `app/blog/[slug]/page.tsx`.
+    *   Implement `generateStaticParams` to return `{ slug: '...' }` for each post, using the slugs derived from filenames.
+    *   Implement the page component to:
+        *   Fetch full post data (including HTML content) using `getPostData(params.slug)`.
+        *   Render the post title, metadata (date, author), and HTML content.
+    *   Implement post-specific SEO:
+        *   Dynamic `<title>{post.title} | Montessori Find</title>`.
+        *   Dynamic `<meta name="description" content={post.description}>`.
+        *   Open Graph and Twitter Card meta tags using frontmatter data.
+    *   Write tests for data fetching, Markdown rendering, and presence of key SEO tags.
+    *   **Success Criteria:** Individual post pages `/blog/[slug]` build statically for each post, render content correctly, and have comprehensive, post-specific SEO meta tags.
+6.  **Structured Data (JSON-LD):**
+    *   In the Blog Post Page component (`app/blog/[slug]/page.tsx`), add a `<script type="application/ld+json">` tag.
+    *   Generate JSON-LD data conforming to the Schema.org `BlogPosting` type, using post metadata (headline, datePublished, dateModified, author, image, description, etc.).
+    *   **Success Criteria:** Rendered HTML source of blog post pages includes valid `BlogPosting` JSON-LD structured data.
+7.  **Styling:**
+    *   Apply basic Tailwind CSS styling to `app/blog/page.tsx` and `app/blog/[slug]/page.tsx` for readability and consistency with the rest of the site. Ensure code blocks within posts are styled appropriately.
+    *   **Success Criteria:** Blog index and post pages are visually appealing and readable.
+8.  **Sitemap:**
+    *   Update the sitemap generation logic (if exists, e.g., `app/sitemap.xml.ts`) to include URLs for the blog index page (`/blog`) and all individual blog post pages (`/blog/[slug]`).
+    *   **Success Criteria:** Generated sitemap includes all blog URLs.
+9.  **Testing & Review:**
+    *   Run `pnpm build` and `pnpm start` to test locally.
+    *   Manually review blog index and several post pages for content accuracy, layout, and SEO tag correctness (using browser dev tools).
+    *   Run any relevant automated tests (unit, integration, potentially E2E if configured).
+    *   **Success Criteria:** Blog builds successfully, functions correctly locally, passes manual review and automated tests.
+
+## Project Status Board (Blog Feature)
+
+*   [ ] **1. Standardize Frontmatter & Content** (Requires Manual Action)
+*   [x] **2. Setup & Dependencies**
+*   [x] **3. Blog Data Fetching Logic** (Implement utils + tests)
+*   [x] **4. Blog Index Page (`/blog`)** (Create page, fetch data, render list, basic SEO + tests)
+*   [x] **5. Blog Post Page (`/blog/[slug]`)** (Create page, `generateStaticParams`, fetch/render content, specific SEO + tests)
+*   [x] **6. Structured Data (JSON-LD)** (Implement schema on post pages)
+*   [x] **7. Styling** (Apply Tailwind styles)
+*   [ ] **8. Sitemap** (Update sitemap generation)
+*   [ ] **9. Testing & Review** (Build, manual review, automated tests)
+
+## Executor's Feedback or Assistance Requests (Blog Feature)
+
+- Task 4 (Blog Index Page) fix: Added 'use server' directive to ensure server-only rendering and allow use of fs, resolving the blank page issue.
+- Task 5 (Blog Post Page) complete: Implemented dynamic post page with SSG, SEO metadata, Open Graph/Twitter tags, and JSON-LD structured data. Uses Tailwind for styling and renders Markdown content as HTML.
+- Tasks 6-7 (Structured Data and Styling) complete: Both the blog index and post pages have been completely restyled to match the provided designs. Features include:
+  - Hero section with background image on the index page
+  - Card-based blog post grid with cover images and tag pills
+  - Full-width cover images on post pages
+  - Centered title with date and tags
+  - Enhanced typography for blog content including lists, blockquotes, and tables
+  - Newsletter signup section at the bottom of post pages
+  - Automatic tag extraction (with fallbacks if not specified in frontmatter)
+  - Consistent green color scheme matching the site's brand
+*   AMS verification details (AMSPathwayModal, ams_pathway_stage, and related UI) have been commented out on the school listings and detail pages. The code is still present for easy restoration later. No AMS details should now appear to users.
+
+## Lessons (Blog Feature)
+
+* For more complex Markdown parsing needs like interactive blogs, adding custom post-processing with regex replacements can greatly enhance the reading experience without requiring changes to the source Markdown files.
+* When dealing with domain-specific content (like Montessori education), adding special handling for common terms and organization names (MACTE, AMI/AMS) improves both SEO and user experience.
+* Using Tailwind's prose plugin with detailed modifiers provides fine-grained control over typography, but custom selectors like `[&_iframe]` may be needed for elements not directly covered.
+* Blog posts that contain tables, especially comparison tables, benefit from enhanced styling beyond what basic Markdown-to-HTML conversion provides.
+* For embedded content like YouTube videos, special handling is required to ensure responsive design and proper styling.
+
+# Background and Motivation
+The project currently uses Netlify functions to proxy Google Maps API requests, which is causing unnecessary costs. We need to reduce Netlify function invocations by pre-generating maps and geocodes at build time.
+
+# Key Challenges and Analysis
+1. The project uses Google Maps in two main ways:
+   - Geocoding addresses to get coordinates
+   - Generating static map images
+2. All school addresses are known at build time
+3. The data is stored in Supabase
+4. The maps are used in:
+   - School detail pages
+   - Map view component
+   - City pages
+
+# High-level Task Breakdown
+
+## Phase 1: Database Schema Updates
+1. Add new columns to schools table:
+   - [x] `geocode_data` (JSONB) - Store geocoding results
+   - [x] `static_map_url` (TEXT) - Store pre-generated static map URL
+   - [x] `coordinates` (JSONB) - Store lat/lng for map markers
+   - [x] Update School type in TypeScript code
+
+## Phase 2: Build-time Generation Script
+1. Create a new script `scripts/generate-maps.ts` that will:
+   - Fetch all schools from Supabase
+   - For each school:
+     - Call Google Maps API to geocode address
+     - Generate static map URL
+     - Update school record in Supabase with new data
+2. Add script to build process in `package.json`
+
+## Phase 3: Update Components
+1. Modify `SecureGoogleMap` component to:
+   - Use pre-generated data instead of making API calls
+   - Fall back to client-side API only if pre-generated data is missing
+2. Update `MapView` component to use pre-generated coordinates
+
+## Phase 4: Testing and Validation
+1. Add tests for new functionality
+2. Verify all map displays work correctly
+3. Test build process with new script
+
+# Project Status Board
+- [x] Database schema updates
+- [ ] Build-time generation script
+- [ ] Component updates
+- [ ] Testing and validation
+
+# Executor's Feedback or Assistance Requests
+Phase 1 (Database Schema Updates) is complete. We have:
+1. Created a SQL migration file (`supabase/migrations/20240321000000_add_map_columns.sql`) with functions to add the new columns
+2. Created a TypeScript script (`scripts/add-map-columns.ts`) to execute the migration
+3. Updated the School type in `lib/supabase.ts` to include the new columns
+
+Next steps:
+1. Run the migration script to add the columns to the database
+2. Proceed with Phase 2 (Build-time Generation Script)
+
+Would you like me to proceed with running the migration script?
+
+# Lessons
+- When adding new columns to a production database, always use idempotent operations (IF NOT EXISTS) to prevent errors if the script is run multiple times
+- For JSONB columns, it's helpful to define the TypeScript types upfront to ensure type safety throughout the application
+
+## Lessons
+
+*(Learnings and reusable patterns will be documented here)*
+*   Use `tsx` instead of `ts-node` for executing TS scripts in modern Node/Next.js projects to avoid module/extension errors.
+*   When updating Supabase records via script, prefer explicit `.update().eq()` over `.upsert()` if encountering unexpected constraint violations, especially if you know the records already exist.
+*   For large datasets in Supabase, always use pagination with `.range()` to avoid hitting the default 1000-record limit.
+*   When creating slug-based routes, having the actual slug stored in the database reduces complexity compared to calculating it on the fly (though we still need to calculate city_slugs).
+*   For URL parameters that need to be case-insensitive (like state abbreviations), standardize on lowercase in URLs (`/states/ca`) but convert to the appropriate case (uppercase) for database queries.
+*   In Next.js App Router, `generateStaticParams` at each route level can work seamlessly with nested dynamic routes to create a hierarchical structure of statically generated pages.
+*   When checking for non-unique slugs, it's better to fetch all matching items and filter them in the application logic rather than using database-level uniqueness constraints, especially when uniqueness depends on combinations of fields.
+*   In Next.js, avoid destructuring route parameters directly in component function parameters. Instead, first access `props.params` as a whole to prevent "params should be awaited before using its properties" warnings.
+*   When implementing automated tests for SEO, focus on key elements that search engines prioritize: title tags, meta descriptions, heading structure, and canonical URLs.
+*   For testing URL structures in a Next.js application, regular expressions provide a flexible way to define and validate URL patterns across the entire site.
+*   Simple performance testing can be done with fetch and measuring response time, but real-world performance depends on many factors like network conditions, browser rendering, and client-side JavaScript execution.
+*   When deploying to Netlify with pnpm, make sure the pnpm-lock.yaml file is always in sync with package.json to avoid CI build failures, as Netlify uses `--frozen-lockfile` by default.
+*   Always add null and type checks before calling methods like `trim()` on values that might come from external sources (like a database). For social media links or URLs, validate that the value is a string before processing it.
+
+---
+
+# Blog Feature Implementation
+
+## Background and Motivation
+
+The goal is to add a dynamic, SEO-friendly blog section to the Montessori Find V2 website. This leverages existing content provided as Markdown files in the `app/blog` directory. The blog aims to enhance user engagement by providing valuable information to parents searching for Montessori schools, improve site content depth, and contribute positively to SEO. The implementation should utilize Server-Side Rendering (SSR) or Static Site Generation (SSG) principles within the existing Next.js framework and adhere to SEO best practices.
+
+## Key Challenges and Analysis
+
+*   **Technology Choice:** Utilizing the existing Next.js App Router structure is optimal. Libraries like `gray-matter` (for frontmatter parsing) and `remark` with `remark-html` (for Markdown to HTML conversion) are suitable choices.
+*   **Routing:** Need to establish routes for the blog index (`/blog`) and individual posts (`/blog/[slug]`). The slugs will be derived from the Markdown filenames.
+*   **Markdown Processing:**
+    *   A robust function is required to read Markdown files from the `app/blog` directory.
+    *   Extract frontmatter (e.g., `title`, `date`, `description`, `author`, `image`) for metadata.
+    *   Convert Markdown body content to HTML for rendering.
+    *   Handle potential errors during file reading or parsing.
+*   **SEO:**
+    *   Implement dynamic generation of `<title>` and `<meta description>` tags based on frontmatter for both index and post pages.
+    *   Add Open Graph (`og:`) and Twitter Card (`twitter:`) meta tags for social sharing previews.
+    *   Incorporate structured data (Schema.org `BlogPosting`) for individual articles to enhance search engine understanding.
+    *   Ensure clean, descriptive URLs using slugs derived from filenames.
+    *   Consider adding internal linking features (e.g., "Related Posts") in the future.
+    *   Update or generate a `sitemap.xml` to include blog URLs.
+*   **Rendering Strategy:** Static Site Generation (SSG) using `generateStaticParams` (for post pages) and fetching data at build time (for index page) is the preferred approach for a blog with content that doesn't change in real-time. This offers the best performance and SEO benefits.
+*   **Content Structure:** Define a standard frontmatter structure for the Markdown files to ensure consistent metadata extraction (e.g., `title`, `date`, `description`, `author`, `coverImage`).
+*   **UI/UX:** Design and implement simple, clean, and readable layouts for the blog index (list of posts) and individual post pages.
+
+## High-level Task Breakdown
+
+1.  **Standardize Frontmatter & Content:**
+    *   Review existing `.md` files in `app/blog`.
+    *   Define and document a standard frontmatter structure (e.g., `title: string`, `date: YYYY-MM-DD`, `description: string`, `author?: string`, `coverImage?: string`).
+    *   **Action (Manual):** Update all existing `.md` files to conform to this structure. Add placeholder content to `10-benefits-of-montessori-education-for-early-learners.md` if it's meant to be included.
+    *   **Success Criteria:** All `.md` files in `app/blog` have consistent and complete frontmatter.
+2.  **Setup & Dependencies:**
+    *   Install necessary libraries: `npm install gray-matter remark remark-html` (or `pnpm add ...`).
+    *   **Success Criteria:** Dependencies installed successfully.
+3.  **Blog Data Fetching Logic:**
+    *   Create a utility function (e.g., in `lib/blog.ts`) to:
+        *   Read all `.md` files from the `app/blog` directory.
+        *   Parse frontmatter using `gray-matter`.
+        *   Generate a `slug` for each post (from filename).
+        *   Sort posts (e.g., by date descending).
+        *   Provide functions like `getAllPostsData()` (for index) and `getPostData(slug)` (for individual posts, including HTML content generation using `remark`).
+    *   Write unit tests for these utility functions.
+    *   **Success Criteria:** Utility functions correctly read, parse, sort posts, generate slugs, and convert Markdown to HTML. Tests pass.
+4.  **Blog Index Page (`/blog`):**
+    *   Create the route `app/blog/page.tsx`.
+    *   Use the `getAllPostsData()` utility to fetch metadata for all posts (title, slug, date, description) at build time (implicitly SSG in App Router).
+    *   Render a list of blog posts, displaying title, date, description, and linking to `/blog/[slug]`.
+    *   Implement basic page-level SEO: `<title>Blog | Montessori Find</title>`, relevant `<meta description>`.
+    *   Write tests for basic rendering and data display.
+    *   **Success Criteria:** `/blog` page builds statically, displays a list of posts fetched from Markdown files, links correctly, and has basic SEO tags.
+5.  **Blog Post Page (`/blog/[slug]`):**
+    *   Create the dynamic route `app/blog/[slug]/page.tsx`.
+    *   Implement `generateStaticParams` to return `{ slug: '...' }` for each post, using the slugs derived from filenames.
+    *   Implement the page component to:
+        *   Fetch full post data (including HTML content) using `getPostData(params.slug)`.
+        *   Render the post title, metadata (date, author), and HTML content.
+    *   Implement post-specific SEO:
+        *   Dynamic `<title>{post.title} | Montessori Find</title>`.
+        *   Dynamic `<meta name="description" content={post.description}>`.
+        *   Open Graph and Twitter Card meta tags using frontmatter data.
+    *   Write tests for data fetching, Markdown rendering, and presence of key SEO tags.
+    *   **Success Criteria:** Individual post pages `/blog/[slug]` build statically for each post, render content correctly, and have comprehensive, post-specific SEO meta tags.
+6.  **Structured Data (JSON-LD):**
+    *   In the Blog Post Page component (`app/blog/[slug]/page.tsx`), add a `<script type="application/ld+json">` tag.
+    *   Generate JSON-LD data conforming to the Schema.org `BlogPosting` type, using post metadata (headline, datePublished, dateModified, author, image, description, etc.).
+    *   **Success Criteria:** Rendered HTML source of blog post pages includes valid `BlogPosting` JSON-LD structured data.
+7.  **Styling:**
+    *   Apply basic Tailwind CSS styling to `app/blog/page.tsx` and `app/blog/[slug]/page.tsx` for readability and consistency with the rest of the site. Ensure code blocks within posts are styled appropriately.
+    *   **Success Criteria:** Blog index and post pages are visually appealing and readable.
+8.  **Sitemap:**
+    *   Update the sitemap generation logic (if exists, e.g., `app/sitemap.xml.ts`) to include URLs for the blog index page (`/blog`) and all individual blog post pages (`/blog/[slug]`).
+    *   **Success Criteria:** Generated sitemap includes all blog URLs.
+9.  **Testing & Review:**
+    *   Run `pnpm build` and `pnpm start` to test locally.
+    *   Manually review blog index and several post pages for content accuracy, layout, and SEO tag correctness (using browser dev tools).
+    *   Run any relevant automated tests (unit, integration, potentially E2E if configured).
+    *   **Success Criteria:** Blog builds successfully, functions correctly locally, passes manual review and automated tests.
+
+## Project Status Board (Blog Feature)
+
+*   [ ] **1. Standardize Frontmatter & Content** (Requires Manual Action)
+*   [x] **2. Setup & Dependencies**
+*   [x] **3. Blog Data Fetching Logic** (Implement utils + tests)
+*   [x] **4. Blog Index Page (`/blog`)** (Create page, fetch data, render list, basic SEO + tests)
+*   [x] **5. Blog Post Page (`/blog/[slug]`)** (Create page, `generateStaticParams`, fetch/render content, specific SEO + tests)
+*   [x] **6. Structured Data (JSON-LD)** (Implement schema on post pages)
+*   [x] **7. Styling** (Apply Tailwind styles)
+*   [ ] **8. Sitemap** (Update sitemap generation)
+*   [ ] **9. Testing & Review** (Build, manual review, automated tests)
+
+## Executor's Feedback or Assistance Requests (Blog Feature)
+
+- Task 4 (Blog Index Page) fix: Added 'use server' directive to ensure server-only rendering and allow use of fs, resolving the blank page issue.
+- Task 5 (Blog Post Page) complete: Implemented dynamic post page with SSG, SEO metadata, Open Graph/Twitter tags, and JSON-LD structured data. Uses Tailwind for styling and renders Markdown content as HTML.
+- Tasks 6-7 (Structured Data and Styling) complete: Both the blog index and post pages have been completely restyled to match the provided designs. Features include:
+  - Hero section with background image on the index page
+  - Card-based blog post grid with cover images and tag pills
+  - Full-width cover images on post pages
+  - Centered title with date and tags
+  - Enhanced typography for blog content including lists, blockquotes, and tables
+  - Newsletter signup section at the bottom of post pages
+  - Automatic tag extraction (with fallbacks if not specified in frontmatter)
+  - Consistent green color scheme matching the site's brand
+*   AMS verification details (AMSPathwayModal, ams_pathway_stage, and related UI) have been commented out on the school listings and detail pages. The code is still present for easy restoration later. No AMS details should now appear to users.
+
+## Lessons (Blog Feature)
+
+* For more complex Markdown parsing needs like interactive blogs, adding custom post-processing with regex replacements can greatly enhance the reading experience without requiring changes to the source Markdown files.
+* When dealing with domain-specific content (like Montessori education), adding special handling for common terms and organization names (MACTE, AMI/AMS) improves both SEO and user experience.
+* Using Tailwind's prose plugin with detailed modifiers provides fine-grained control over typography, but custom selectors like `[&_iframe]` may be needed for elements not directly covered.
+* Blog posts that contain tables, especially comparison tables, benefit from enhanced styling beyond what basic Markdown-to-HTML conversion provides.
+* For embedded content like YouTube videos, special handling is required to ensure responsive design and proper styling.
+
+# Background and Motivation
+The project currently uses Netlify functions to proxy Google Maps API requests, which is causing unnecessary costs. We need to reduce Netlify function invocations by pre-generating maps and geocodes at build time.
+
+# Key Challenges and Analysis
+1. The project uses Google Maps in two main ways:
+   - Geocoding addresses to get coordinates
+   - Generating static map images
+2. All school addresses are known at build time
+3. The data is stored in Supabase
+4. The maps are used in:
+   - School detail pages
+   - Map view component
+   - City pages
+
+# High-level Task Breakdown
+
+## Phase 1: Database Schema Updates
+1. Add new columns to schools table:
+   - [x] `geocode_data` (JSONB) - Store geocoding results
+   - [x] `static_map_url` (TEXT) - Store pre-generated static map URL
+   - [x] `coordinates` (JSONB) - Store lat/lng for map markers
+   - [x] Update School type in TypeScript code
+
+## Phase 2: Build-time Generation Script
+1. Create a new script `scripts/generate-maps.ts` that will:
+   - Fetch all schools from Supabase
+   - For each school:
+     - Call Google Maps API to geocode address
+     - Generate static map URL
+     - Update school record in Supabase with new data
+2. Add script to build process in `package.json`
+
+## Phase 3: Update Components
+1. Modify `SecureGoogleMap` component to:
+   - Use pre-generated data instead of making API calls
+   - Fall back to client-side API only if pre-generated data is missing
+2. Update `MapView` component to use pre-generated coordinates
+
+## Phase 4: Testing and Validation
+1. Add tests for new functionality
+2. Verify all map displays work correctly
+3. Test build process with new script
+
+# Project Status Board
+- [x] Database schema updates
+- [ ] Build-time generation script
+- [ ] Component updates
+- [ ] Testing and validation
+
+# Executor's Feedback or Assistance Requests
+Phase 1 (Database Schema Updates) is complete. We have:
+1. Created a SQL migration file (`supabase/migrations/20240321000000_add_map_columns.sql`) with functions to add the new columns
+2. Created a TypeScript script (`scripts/add-map-columns.ts`) to execute the migration
+3. Updated the School type in `lib/supabase.ts` to include the new columns
+
+Next steps:
+1. Run the migration script to add the columns to the database
+2. Proceed with Phase 2 (Build-time Generation Script)
+
+Would you like me to proceed with running the migration script?
+
+# Lessons
+- When adding new columns to a production database, always use idempotent operations (IF NOT EXISTS) to prevent errors if the script is run multiple times
+- For JSONB columns, it's helpful to define the TypeScript types upfront to ensure type safety throughout the application
+
+## Lessons
+
+*(Learnings and reusable patterns will be documented here)*
+*   Use `tsx` instead of `ts-node` for executing TS scripts in modern Node/Next.js projects to avoid module/extension errors.
+*   When updating Supabase records via script, prefer explicit `.update().eq()` over `.upsert()` if encountering unexpected constraint violations, especially if you know the records already exist.
+*   For large datasets in Supabase, always use pagination with `.range()` to avoid hitting the default 1000-record limit.
+*   When creating slug-based routes, having the actual slug stored in the database reduces complexity compared to calculating it on the fly (though we still need to calculate city_slugs).
+*   For URL parameters that need to be case-insensitive (like state abbreviations), standardize on lowercase in URLs (`/states/ca`) but convert to the appropriate case (uppercase) for database queries.
+*   In Next.js App Router, `generateStaticParams` at each route level can work seamlessly with nested dynamic routes to create a hierarchical structure of statically generated pages.
+*   When checking for non-unique slugs, it's better to fetch all matching items and filter them in the application logic rather than using database-level uniqueness constraints, especially when uniqueness depends on combinations of fields.
+*   In Next.js, avoid destructuring route parameters directly in component function parameters. Instead, first access `props.params` as a whole to prevent "params should be awaited before using its properties" warnings.
+*   When implementing automated tests for SEO, focus on key elements that search engines prioritize: title tags, meta descriptions, heading structure, and canonical URLs.
+*   For testing URL structures in a Next.js application, regular expressions provide a flexible way to define and validate URL patterns across the entire site.
+*   Simple performance testing can be done with fetch and measuring response time, but real-world performance depends on many factors like network conditions, browser rendering, and client-side JavaScript execution.
+*   When deploying to Netlify with pnpm, make sure the pnpm-lock.yaml file is always in sync with package.json to avoid CI build failures, as Netlify uses `--frozen-lockfile` by default.
+*   Always add null and type checks before calling methods like `trim()` on values that might come from external sources (like a database). For social media links or URLs, validate that the value is a string before processing it.
+
+---
+
+# Blog Feature Implementation
+
+## Background and Motivation
+
+The goal is to add a dynamic, SEO-friendly blog section to the Montessori Find V2 website. This leverages existing content provided as Markdown files in the `app/blog` directory. The blog aims to enhance user engagement by providing valuable information to parents searching for Montessori schools, improve site content depth, and contribute positively to SEO. The implementation should utilize Server-Side Rendering (SSR) or Static Site Generation (SSG) principles within the existing Next.js framework and adhere to SEO best practices.
+
+## Key Challenges and Analysis
+
+*   **Technology Choice:** Utilizing the existing Next.js App Router structure is optimal. Libraries like `gray-matter` (for frontmatter parsing) and `remark` with `remark-html` (for Markdown to HTML conversion) are suitable choices.
+*   **Routing:** Need to establish routes for the blog index (`/blog`) and individual posts (`/blog/[slug]`). The slugs will be derived from the Markdown filenames.
+*   **Markdown Processing:**
+    *   A robust function is required to read Markdown files from the `app/blog` directory.
+    *   Extract frontmatter (e.g., `title`, `date`, `description`, `author`, `image`) for metadata.
+    *   Convert Markdown body content to HTML for rendering.
+    *   Handle potential errors during file reading or parsing.
+*   **SEO:**
+    *   Implement dynamic generation of `<title>` and `<meta description>` tags based on frontmatter for both index and post pages.
+    *   Add Open Graph (`og:`) and Twitter Card (`twitter:`) meta tags for social sharing previews.
+    *   Incorporate structured data (Schema.org `BlogPosting`) for individual articles to enhance search engine understanding.
+    *   Ensure clean, descriptive URLs using slugs derived from filenames.
+    *   Consider adding internal linking features (e.g., "Related Posts") in the future.
+    *   Update or generate a `sitemap.xml` to include blog URLs.
+*   **Rendering Strategy:** Static Site Generation (SSG) using `generateStaticParams` (for post pages) and fetching data at build time (for index page) is the preferred approach for a blog with content that doesn't change in real-time. This offers the best performance and SEO benefits.
+*   **Content Structure:** Define a standard frontmatter structure for the Markdown files to ensure consistent metadata extraction (e.g., `title`, `date`, `description`, `author`, `coverImage`).
+*   **UI/UX:** Design and implement simple, clean, and readable layouts for the blog index (list of posts) and individual post pages.
+
+## High-level Task Breakdown
+
+1.  **Standardize Frontmatter & Content:**
+    *   Review existing `.md` files in `app/blog`.
+    *   Define and document a standard frontmatter structure (e.g., `title: string`, `date: YYYY-MM-DD`, `description: string`, `author?: string`, `coverImage?: string`).
+    *   **Action (Manual):** Update all existing `.md` files to conform to this structure. Add placeholder content to `10-benefits-of-montessori-education-for-early-learners.md` if it's meant to be included.
+    *   **Success Criteria:** All `.md` files in `app/blog` have consistent and complete frontmatter.
+2.  **Setup & Dependencies:**
+    *   Install necessary libraries: `npm install gray-matter remark remark-html` (or `pnpm add ...`).
+    *   **Success Criteria:** Dependencies installed successfully.
+3.  **Blog Data Fetching Logic:**
+    *   Create a utility function (e.g., in `lib/blog.ts`) to:
+        *   Read all `.md` files from the `app/blog` directory.
+        *   Parse frontmatter using `gray-matter`.
+        *   Generate a `slug` for each post (from filename).
+        *   Sort posts (e.g., by date descending).
+        *   Provide functions like `getAllPostsData()` (for index) and `getPostData(slug)` (for individual posts, including HTML content generation using `remark`).
+    *   Write unit tests for these utility functions.
+    *   **Success Criteria:** Utility functions correctly read, parse, sort posts, generate slugs, and convert Markdown to HTML. Tests pass.
+4.  **Blog Index Page (`/blog`):**
+    *   Create the route `app/blog/page.tsx`.
+    *   Use the `getAllPostsData()` utility to fetch metadata for all posts (title, slug, date, description) at build time (implicitly SSG in App Router).
+    *   Render a list of blog posts, displaying title, date, description, and linking to `/blog/[slug]`.
+    *   Implement basic page-level SEO: `<title>Blog | Montessori Find</title>`, relevant `<meta description>`.
+    *   Write tests for basic rendering and data display.
+    *   **Success Criteria:** `/blog` page builds statically, displays a list of posts fetched from Markdown files, links correctly, and has basic SEO tags.
+5.  **Blog Post Page (`/blog/[slug]`):**
+    *   Create the dynamic route `app/blog/[slug]/page.tsx`.
+    *   Implement `generateStaticParams` to return `{ slug: '...' }` for each post, using the slugs derived from filenames.
+    *   Implement the page component to:
+        *   Fetch full post data (including HTML content) using `getPostData(params.slug)`.
+        *   Render the post title, metadata (date, author), and HTML content.
+    *   Implement post-specific SEO:
+        *   Dynamic `<title>{post.title} | Montessori Find</title>`.
+        *   Dynamic `<meta name="description" content={post.description}>`.
+        *   Open Graph and Twitter Card meta tags using frontmatter data.
+    *   Write tests for data fetching, Markdown rendering, and presence of key SEO tags.
+    *   **Success Criteria:** Individual post pages `/blog/[slug]` build statically for each post, render content correctly, and have comprehensive, post-specific SEO meta tags.
+6.  **Structured Data (JSON-LD):**
+    *   In the Blog Post Page component (`app/blog/[slug]/page.tsx`), add a `<script type="application/ld+json">` tag.
+    *   Generate JSON-LD data conforming to the Schema.org `BlogPosting` type, using post metadata (headline, datePublished, dateModified, author, image, description, etc.).
+    *   **Success Criteria:** Rendered HTML source of blog post pages includes valid `BlogPosting` JSON-LD structured data.
+7.  **Styling:**
+    *   Apply basic Tailwind CSS styling to `app/blog/page.tsx` and `app/blog/[slug]/page.tsx` for readability and consistency with the rest of the site. Ensure code blocks within posts are styled appropriately.
+    *   **Success Criteria:** Blog index and post pages are visually appealing and readable.
+8.  **Sitemap:**
+    *   Update the sitemap generation logic (if exists, e.g., `app/sitemap.xml.ts`) to include URLs for the blog index page (`/blog`) and all individual blog post pages (`/blog/[slug]`).
+    *   **Success Criteria:** Generated sitemap includes all blog URLs.
+9.  **Testing & Review:**
+    *   Run `pnpm build` and `pnpm start` to test locally.
+    *   Manually review blog index and several post pages for content accuracy, layout, and SEO tag correctness (using browser dev tools).
+    *   Run any relevant automated tests (unit, integration, potentially E2E if configured).
+    *   **Success Criteria:** Blog builds successfully, functions correctly locally, passes manual review and automated tests.
+
+## Project Status Board (Blog Feature)
+
+*   [ ] **1. Standardize Frontmatter & Content** (Requires Manual Action)
+*   [x] **2. Setup & Dependencies**
+*   [x] **3. Blog Data Fetching Logic** (Implement utils + tests)
+*   [x] **4. Blog Index Page (`/blog`)** (Create page, fetch data, render list, basic SEO + tests)
+*   [x] **5. Blog Post Page (`/blog/[slug]`)** (Create page, `generateStaticParams`, fetch/render content, specific SEO + tests)
+*   [x] **6. Structured Data (JSON-LD)** (Implement schema on post pages)
+*   [x] **7. Styling** (Apply Tailwind styles)
+*   [ ] **8. Sitemap** (Update sitemap generation)
+*   [ ] **9. Testing & Review** (Build, manual review, automated tests)
+
+## Executor's Feedback or Assistance Requests (Blog Feature)
+
+- Task 4 (Blog Index Page) fix: Added 'use server' directive to ensure server-only rendering and allow use of fs, resolving the blank page issue.
+- Task 5 (Blog Post Page) complete: Implemented dynamic post page with SSG, SEO metadata, Open Graph/Twitter tags, and JSON-LD structured data. Uses Tailwind for styling and renders Markdown content as HTML.
+- Tasks 6-7 (Structured Data and Styling) complete: Both the blog index and post pages have been completely restyled to match the provided designs. Features include:
+  - Hero section with background image on the index page
+  - Card-based blog post grid with cover images and tag pills
+  - Full-width cover images on post pages
+  - Centered title with date and tags
+  - Enhanced typography for blog content including lists, blockquotes, and tables
+  - Newsletter signup section at the bottom of post pages
+  - Automatic tag extraction (with fallbacks if not specified in frontmatter)
+  - Consistent green color scheme matching the site's brand
+*   AMS verification details (AMSPathwayModal, ams_pathway_stage, and related UI) have been commented out on the school listings and detail pages. The code is still present for easy restoration later. No AMS details should now appear to users.
+
+## Lessons (Blog Feature)
+
+* For more complex Markdown parsing needs like interactive blogs, adding custom post-processing with regex replacements can greatly enhance the reading experience without requiring changes to the source Markdown files.
+* When dealing with domain-specific content (like Montessori education), adding special handling for common terms and organization names (MACTE, AMI/AMS) improves both SEO and user experience.
+* Using Tailwind's prose plugin with detailed modifiers provides fine-grained control over typography, but custom selectors like `[&_iframe]` may be needed for elements not directly covered.
+* Blog posts that contain tables, especially comparison tables, benefit from enhanced styling beyond what basic Markdown-to-HTML conversion provides.
+* For embedded content like YouTube videos, special handling is required to ensure responsive design and proper styling.
+
+# Background and Motivation
+The project currently uses Netlify functions to proxy Google Maps API requests, which is causing unnecessary costs. We need to reduce Netlify function invocations by pre-generating maps and geocodes at build time.
+
+# Key Challenges and Analysis
+1. The project uses Google Maps in two main ways:
+   - Geocoding addresses to get coordinates
+   - Generating static map images
+2. All school addresses are known at build time
+3. The data is stored in Supabase
+4. The maps are used in:
+   - School detail pages
+   - Map view component
+   - City pages
+
+# High-level Task Breakdown
+
+## Phase 1: Database Schema Updates
+1. Add new columns to schools table:
+   - [x] `geocode_data` (JSONB) - Store geocoding results
+   - [x] `static_map_url` (TEXT) - Store pre-generated static map URL
+   - [x] `coordinates` (JSONB) - Store lat/lng for map markers
+   - [x] Update School type in TypeScript code
+
+## Phase 2: Build-time Generation Script
+1. Create a new script `scripts/generate-maps.ts` that will:
+   - Fetch all schools from Supabase
+   - For each school:
+     - Call Google Maps API to geocode address
+     - Generate static map URL
+     - Update school record in Supabase with new data
+2. Add script to build process in `package.json`
+
+## Phase 3: Update Components
+1. Modify `SecureGoogleMap` component to:
+   - Use pre-generated data instead of making API calls
+   - Fall back to client-side API only if pre-generated data is missing
+2. Update `MapView` component to use pre-generated coordinates
+
+## Phase 4: Testing and Validation
+1. Add tests for new functionality
+2. Verify all map displays work correctly
+3. Test build process with new script
+
+# Project Status Board
+- [x] Database schema updates
+- [ ] Build-time generation script
+- [ ] Component updates
+- [ ] Testing and validation
+
+# Executor's Feedback or Assistance Requests
+Phase 1 (Database Schema Updates) is complete. We have:
+1. Created a SQL migration file (`supabase/migrations/20240321000000_add_map_columns.sql`) with functions to add the new columns
+2. Created a TypeScript script (`scripts/add-map-columns.ts`) to execute the migration
+3. Updated the School type in `lib/supabase.ts` to include the new columns
+
+Next steps:
+1. Run the migration script to add the columns to the database
+2. Proceed with Phase 2 (Build-time Generation Script)
+
+Would you like me to proceed with running the migration script?
+
+# Lessons
+- When adding new columns to a production database, always use idempotent operations (IF NOT EXISTS) to prevent errors if the script is run multiple times
+- For JSONB columns, it's helpful to define the TypeScript types upfront to ensure type safety throughout the application
+
+## Lessons
+
+*(Learnings and reusable patterns will be documented here)*
+*   Use `tsx` instead of `ts-node` for executing TS scripts in modern Node/Next.js projects to avoid module/extension errors.
+*   When updating Supabase records via script, prefer explicit `.update().eq()` over `.upsert()` if encountering unexpected constraint violations, especially if you know the records already exist.
+*   For large datasets in Supabase, always use pagination with `.range()` to avoid hitting the default 1000-record limit.
+*   When creating slug-based routes, having the actual slug stored in the database reduces complexity compared to calculating it on the fly (though we still need to calculate city_slugs).
+*   For URL parameters that need to be case-insensitive (like state abbreviations), standardize on lowercase in URLs (`/states/ca`) but convert to the appropriate case (uppercase) for database queries.
+*   In Next.js App Router, `generateStaticParams` at each route level can work seamlessly with nested dynamic routes to create a hierarchical structure of statically generated pages.
+*   When checking for non-unique slugs, it's better to fetch all matching items and filter them in the application logic rather than using database-level uniqueness constraints, especially when uniqueness depends on combinations of fields.
+*   In Next.js, avoid destructuring route parameters directly in component function parameters. Instead, first access `props.params` as a whole to prevent "params should be awaited before using its properties" warnings.
+*   When implementing automated tests for SEO, focus on key elements that search engines prioritize: title tags, meta descriptions, heading structure, and canonical URLs.
+*   For testing URL structures in a Next.js application, regular expressions provide a flexible way to define and validate URL patterns across the entire site.
+*   Simple performance testing can be done with fetch and measuring response time, but real-world performance depends on many factors like network conditions, browser rendering, and client-side JavaScript execution.
+*   When deploying to Netlify with pnpm, make sure the pnpm-lock.yaml file is always in sync with package.json to avoid CI build failures, as Netlify uses `--frozen-lockfile` by default.
+*   Always add null and type checks before calling methods like `trim()` on values that might come from external sources (like a database). For social media links or URLs, validate that the value is a string before processing it.
+
+---
+
+# Blog Feature Implementation
+
+## Background and Motivation
+
+The goal is to add a dynamic, SEO-friendly blog section to the Montessori Find V2 website. This leverages existing content provided as Markdown files in the `app/blog` directory. The blog aims to enhance user engagement by providing valuable information to parents searching for Montessori schools, improve site content depth, and contribute positively to SEO. The implementation should utilize Server-Side Rendering (SSR) or Static Site Generation (SSG) principles within the existing Next.js framework and adhere to SEO best practices.
+
+## Key Challenges and Analysis
+
+*   **Technology Choice:** Utilizing the existing Next.js App Router structure is optimal. Libraries like `gray-matter` (for frontmatter parsing) and `remark` with `remark-html` (for Markdown to HTML conversion) are suitable choices.
+*   **Routing:** Need to establish routes for the blog index (`/blog`) and individual posts (`/blog/[slug]`). The slugs will be derived from the Markdown filenames.
+*   **Markdown Processing:**
+    *   A robust function is required to read Markdown files from the `app/blog` directory.
+    *   Extract frontmatter (e.g., `title`, `date`, `description`, `author`, `image`) for metadata.
+    *   Convert Markdown body content to HTML for rendering.
+    *   Handle potential errors during file reading or parsing.
+*   **SEO:**
+    *   Implement dynamic generation of `<title>` and `<meta description>` tags based on frontmatter for both index and post pages.
+    *   Add Open Graph (`og:`) and Twitter Card (`twitter:`) meta tags for social sharing previews.
+    *   Incorporate structured data (Schema.org `BlogPosting`) for individual articles to enhance search engine understanding.
+    *   Ensure clean, descriptive URLs using slugs derived from filenames.
+    *   Consider adding internal linking features (e.g., "Related Posts") in the future.
+    *   Update or generate a `sitemap.xml` to include blog URLs.
+*   **Rendering Strategy:** Static Site Generation (SSG) using `generateStaticParams` (for post pages) and fetching data at build time (for index page) is the preferred approach for a blog with content that doesn't change in real-time. This offers the best performance and SEO benefits.
+*   **Content Structure:** Define a standard frontmatter structure for the Markdown files to ensure consistent metadata extraction (e.g., `title`, `date`, `description`, `author`, `coverImage`).
+*   **UI/UX:** Design and implement simple, clean, and readable layouts for the blog index (list of posts) and individual post pages.
+
+## High-level Task Breakdown
+
+1.  **Standardize Frontmatter & Content:**
+    *   Review existing `.md` files in `app/blog`.
+    *   Define and document a standard frontmatter structure (e.g., `title: string`, `date: YYYY-MM-DD`, `description: string`, `author?: string`, `coverImage?: string`).
+    *   **Action (Manual):** Update all existing `.md` files to conform to this structure. Add placeholder content to `10-benefits-of-montessori-education-for-early-learners.md` if it's meant to be included.
+    *   **Success Criteria:** All `.md` files in `app/blog` have consistent and complete frontmatter.
+2.  **Setup & Dependencies:**
+    *   Install necessary libraries: `npm install gray-matter remark remark-html` (or `pnpm add ...`).
+    *   **Success Criteria:** Dependencies installed successfully.
+3.  **Blog Data Fetching Logic:**
+    *   Create a utility function (e.g., in `lib/blog.ts`) to:
+        *   Read all `.md` files from the `app/blog` directory.
+        *   Parse frontmatter using `gray-matter`.
+        *   Generate a `slug` for each post (from filename).
+        *   Sort posts (e.g., by date descending).
+        *   Provide functions like `getAllPostsData()` (for index) and `getPostData(slug)` (for individual posts, including HTML content generation using `remark`).
+    *   Write unit tests for these utility functions.
+    *   **Success Criteria:** Utility functions correctly read, parse, sort posts, generate slugs, and convert Markdown to HTML. Tests pass.
+4.  **Blog Index Page (`/blog`):**
+    *   Create the route `app/blog/page.tsx`.
+    *   Use the `getAllPostsData()` utility to fetch metadata for all posts (title, slug, date, description) at build time (implicitly SSG in App Router).
+    *   Render a list of blog posts, displaying title, date, description, and linking to `/blog/[slug]`.
+    *   Implement basic page-level SEO: `<title>Blog | Montessori Find</title>`, relevant `<meta description>`.
+    *   Write tests for basic rendering and data display.
+    *   **Success Criteria:** `/blog` page builds statically, displays a list of posts fetched from Markdown files, links correctly, and has basic SEO tags.
+5.  **Blog Post Page (`/blog/[slug]`):**
+    *   Create the dynamic route `app/blog/[slug]/page.tsx`.
+    *   Implement `generateStaticParams` to return `{ slug: '...' }` for each post, using the slugs derived from filenames.
+    *   Implement the page component to:
+        *   Fetch full post data (including HTML content) using `getPostData(params.slug)`.
+        *   Render the post title, metadata (date, author), and HTML content.
+    *   Implement post-specific SEO:
+        *   Dynamic `<title>{post.title} | Montessori Find</title>`.
+        *   Dynamic `<meta name="description" content={post.description}>`.
+        *   Open Graph and Twitter Card meta tags using frontmatter data.
+    *   Write tests for data fetching, Markdown rendering, and presence of key SEO tags.
+    *   **Success Criteria:** Individual post pages `/blog/[slug]` build statically for each post, render content correctly, and have comprehensive, post-specific SEO meta tags.
+6.  **Structured Data (JSON-LD):**
+    *   In the Blog Post Page component (`app/blog/[slug]/page.tsx`), add a `<script type="application/ld+json">` tag.
+    *   Generate JSON-LD data conforming to the Schema.org `BlogPosting` type, using post metadata (headline, datePublished, dateModified, author, image, description, etc.).
+    *   **Success Criteria:** Rendered HTML source of blog post pages includes valid `BlogPosting` JSON-LD structured data.
+7.  **Styling:**
+    *   Apply basic Tailwind CSS styling to `app/blog/page.tsx` and `app/blog/[slug]/page.tsx` for readability and consistency with the rest of the site. Ensure code blocks within posts are styled appropriately.
+    *   **Success Criteria:** Blog index and post pages are visually appealing and readable.
+8.  **Sitemap:**
+    *   Update the sitemap generation logic (if exists, e.g., `app/sitemap.xml.ts`) to include URLs for the blog index page (`/blog`) and all individual blog post pages (`/blog/[slug]`).
+    *   **Success Criteria:** Generated sitemap includes all blog URLs.
+9.  **Testing & Review:**
+    *   Run `pnpm build` and `pnpm start` to test locally.
+    *   Manually review blog index and several post pages for content accuracy, layout, and SEO tag correctness (using browser dev tools).
+    *   Run any relevant automated tests (unit, integration, potentially E2E if configured).
+    *   **Success Criteria:** Blog builds successfully, functions correctly locally, passes manual review and automated tests.
+
+## Project Status Board (Blog Feature)
+
+*   [ ] **1. Standardize Frontmatter & Content** (Requires Manual Action)
+*   [x] **2. Setup & Dependencies**
+*   [x] **3. Blog Data Fetching Logic** (Implement utils + tests)
+*   [x] **4. Blog Index Page (`/blog`)** (Create page, fetch data, render list, basic SEO + tests)
+*   [x] **5. Blog Post Page (`/blog/[slug]`)** (Create page, `generateStaticParams`, fetch/render content, specific SEO + tests)
+*   [x] **6. Structured Data (JSON-LD)** (Implement schema on post pages)
+*   [x] **7. Styling** (Apply Tailwind styles)
+*   [ ] **8. Sitemap** (Update sitemap generation)
+*   [ ] **9. Testing & Review** (Build, manual review, automated tests)
+
+## Executor's Feedback or Assistance Requests (Blog Feature)
+
+- Task 4 (Blog Index Page) fix: Added 'use server' directive to ensure server-only rendering and allow use of fs, resolving the blank page issue.
+- Task 5 (Blog Post Page) complete: Implemented dynamic post page with SSG, SEO metadata, Open Graph/Twitter tags, and JSON-LD structured data. Uses Tailwind for styling and renders Markdown content as HTML.
+- Tasks 6-7 (Structured Data and Styling) complete: Both the blog index and post pages have been completely restyled to match the provided designs. Features include:
+  - Hero section with background image on the index page
+  - Card-based blog post grid with cover images and tag pills
+  - Full-width cover images on post pages
+  - Centered title with date and tags
+  - Enhanced typography for blog content including lists, blockquotes, and tables
+  - Newsletter signup section at the bottom of post pages
+  - Automatic tag extraction (with fallbacks if not specified in frontmatter)
+  - Consistent green color scheme matching the site's brand
+*   AMS verification details (AMSPathwayModal, ams_pathway_stage, and related UI) have been commented out on the school listings and detail pages. The code is still present for easy restoration later. No AMS details should now appear to users.
+
+## Lessons (Blog Feature)
+
+* For more complex Markdown parsing needs like interactive blogs, adding custom post-processing with regex replacements can greatly enhance the reading experience without requiring changes to the source Markdown files.
+* When dealing with domain-specific content (like Montessori education), adding special handling for common terms and organization names (MACTE, AMI/AMS) improves both SEO and user experience.
+* Using Tailwind's prose plugin with detailed modifiers provides fine-grained control over typography, but custom selectors like `[&_iframe]` may be needed for elements not directly covered.
+* Blog posts that contain tables, especially comparison tables, benefit from enhanced styling beyond what basic Markdown-to-HTML conversion provides.
+* For embedded content like YouTube videos, special handling is required to ensure responsive design and proper styling.
+
+# Background and Motivation
+The project currently uses Netlify functions to proxy Google Maps API requests, which is causing unnecessary costs. We need to reduce Netlify function invocations by pre-generating maps and geocodes at build time.
+
+# Key Challenges and Analysis
+1. The project uses Google Maps in two main ways:
+   - Geocoding addresses to get coordinates
+   - Generating static map images
+2. All school addresses are known at build time
+3. The data is stored in Supabase
+4. The maps are used in:
+   - School detail pages
+   - Map view component
+   - City pages
+
+# High-level Task Breakdown
+
+## Phase 1: Database Schema Updates
+1. Add new columns to schools table:
+   - [x] `geocode_data` (JSONB) - Store geocoding results
+   - [x] `static_map_url` (TEXT) - Store pre-generated static map URL
+   - [x] `coordinates` (JSONB) - Store lat/lng for map markers
+   - [x] Update School type in TypeScript code
+
+## Phase 2: Build-time Generation Script
+1. Create a new script `scripts/generate-maps.ts` that will:
+   - Fetch all schools from Supabase
+   - For each school:
+     - Call Google Maps API to geocode address
+     - Generate static map URL
+     - Update school record in Supabase with new data
+2. Add script to build process in `package.json`
+
+## Phase 3: Update Components
+1. Modify `SecureGoogleMap` component to:
+   - Use pre-generated data instead of making API calls
+   - Fall back to client-side API only if pre-generated data is missing
+2. Update `MapView` component to use pre-generated coordinates
+
+## Phase 4: Testing and Validation
+1. Add tests for new functionality
+2. Verify all map displays work correctly
+3. Test build process with new script
+
+# Project Status Board
+- [x] Database schema updates
+- [ ] Build-time generation script
+- [ ] Component updates
+- [ ] Testing and validation
+
+# Executor's Feedback or Assistance Requests
+Phase 1 (Database Schema Updates) is complete. We have:
+1. Created a SQL migration file (`supabase/migrations/20240321000000_add_map_columns.sql`) with functions to add the new columns
+2. Created a TypeScript script (`scripts/add-map-columns.ts`) to execute the migration
+3. Updated the School type in `lib/supabase.ts` to include the new columns
+
+Next steps:
+1. Run the migration script to add the columns to the database
+2. Proceed with Phase 2 (Build-time Generation Script)
+
+Would you like me to proceed with running the migration script?
+
+# Lessons
+- When adding new columns to a production database, always use idempotent operations (IF NOT EXISTS) to prevent errors if the script is run multiple times
+- For JSONB columns, it's helpful to define the TypeScript types upfront to ensure type safety throughout the application
+
+## Lessons
+
+*(Learnings and reusable patterns will be documented here)*
+*   Use `tsx` instead of `ts-node` for executing TS scripts in modern Node/Next.js projects to avoid module/extension errors.
+*   When updating Supabase records via script, prefer explicit `.update().eq()` over `.upsert()` if encountering unexpected constraint violations, especially if you know the records already exist.
+*   For large datasets in Supabase, always use pagination with `.range()` to avoid hitting the default 1000-record limit.
+*   When creating slug-based routes, having the actual slug stored in the database reduces complexity compared to calculating it on the fly (though we still need to calculate city_slugs).
+*   For URL parameters that need to be case-insensitive (like state abbreviations), standardize on lowercase in URLs (`/states/ca`) but convert to the appropriate case (uppercase) for database queries.
+*   In Next.js App Router, `generateStaticParams` at each route level can work seamlessly with nested dynamic routes to create a hierarchical structure of statically generated pages.
+*   When checking for non-unique slugs, it's better to fetch all matching items and filter them in the application logic rather than using database-level uniqueness constraints, especially when uniqueness depends on combinations of fields.
+*   In Next.js, avoid destructuring route parameters directly in component function parameters. Instead, first access `props.params` as a whole to prevent "params should be awaited before using its properties" warnings.
+*   When implementing automated tests for SEO, focus on key elements that search engines prioritize: title tags, meta descriptions, heading structure, and canonical URLs.
+*   For testing URL structures in a Next.js application, regular expressions provide a flexible way to define and validate URL patterns across the entire site.
+*   Simple performance testing can be done with fetch and measuring response time, but real-world performance depends on many factors like network conditions, browser rendering, and client-side JavaScript execution.
+*   When deploying to Netlify with pnpm, make sure the pnpm-lock.yaml file is always in sync with package.json to avoid CI build failures, as Netlify uses `--frozen-lockfile` by default.
+*   Always add null and type checks before calling methods like `trim()` on values that might come from external sources (like a database). For social media links or URLs, validate that the value is a string before processing it.
+
+---
+
+# Blog Feature Implementation
+
+## Background and Motivation
+
+The goal is to add a dynamic, SEO-friendly blog section to the Montessori Find V2 website. This leverages existing content provided as Markdown files in the `app/blog` directory. The blog aims to enhance user engagement by providing valuable information to parents searching for Montessori schools, improve site content depth, and contribute positively to SEO. The implementation should utilize Server-Side Rendering (SSR) or Static Site Generation (SSG) principles within the existing Next.js framework and adhere to SEO best practices.
+
+## Key Challenges and Analysis
+
+*   **Technology Choice:** Utilizing the existing Next.js App Router structure is optimal. Libraries like `gray-matter` (for frontmatter parsing) and `remark` with `remark-html` (for Markdown to HTML conversion) are suitable choices.
+*   **Routing:** Need to establish routes for the blog index (`/blog`) and individual posts (`/blog/[slug]`). The slugs will be derived from the Markdown filenames.
+*   **Markdown Processing:**
+    *   A robust function is required to read Markdown files from the `app/blog` directory.
+    *   Extract frontmatter (e.g., `title`, `date`, `description`, `author`, `image`) for metadata.
+    *   Convert Markdown body content to HTML for rendering.
+    *   Handle potential errors during file reading or parsing.
+*   **SEO:**
+    *   Implement dynamic generation of `<title>` and `<meta description>` tags based on frontmatter for both index and post pages.
+    *   Add Open Graph (`og:`) and Twitter Card (`twitter:`) meta tags for social sharing previews.
+    *   Incorporate structured data (Schema.org `BlogPosting`) for individual articles to enhance search engine understanding.
+    *   Ensure clean, descriptive URLs using slugs derived from filenames.
+    *   Consider adding internal linking features (e.g., "Related Posts") in the future.
+    *   Update or generate a `sitemap.xml` to include blog URLs.
+*   **Rendering Strategy:** Static Site Generation (SSG) using `generateStaticParams` (for post pages) and fetching data at build time (for index page) is the preferred approach for a blog with content that doesn't change in real-time. This offers the best performance and SEO benefits.
+*   **Content Structure:** Define a standard frontmatter structure for the Markdown files to ensure consistent metadata extraction (e.g., `title`, `date`, `description`, `author`, `coverImage`).
+*   **UI/UX:** Design and implement simple, clean, and readable layouts for the blog index (list of posts) and individual post pages.
+
+## High-level Task Breakdown
+
+1.  **Standardize Frontmatter & Content:**
+    *   Review existing `.md` files in `app/blog`.
+    *   Define and document a standard frontmatter structure (e.g., `title: string`, `date: YYYY-MM-DD`, `description: string`, `author?: string`, `coverImage?: string`).
+    *   **Action (Manual):** Update all existing `.md` files to conform to this structure. Add placeholder content to `10-benefits-of-montessori-education-for-early-learners.md` if it's meant to be included.
+    *   **Success Criteria:** All `.md` files in `app/blog` have consistent and complete frontmatter.
+2.  **Setup & Dependencies:**
+    *   Install necessary libraries: `npm install gray-matter remark remark-html` (or `pnpm add ...`).
+    *   **Success Criteria:** Dependencies installed successfully.
+3.  **Blog Data Fetching Logic:**
+    *   Create a utility function (e.g., in `lib/blog.ts`) to:
+        *   Read all `.md` files from the `app/blog` directory.
+        *   Parse frontmatter using `gray-matter`.
+        *   Generate a `slug` for each post (from filename).
+        *   Sort posts (e.g., by date descending).
+        *   Provide functions like `getAllPostsData()` (for index) and `getPostData(slug)` (for individual posts, including HTML content generation using `remark`).
+    *   Write unit tests for these utility functions.
+    *   **Success Criteria:** Utility functions correctly read, parse, sort posts, generate slugs, and convert Markdown to HTML. Tests pass.
+4.  **Blog Index Page (`/blog`):**
+    *   Create the route `app/blog/page.tsx`.
+    *   Use the `getAllPostsData()` utility to fetch metadata for all posts (title, slug, date, description) at build time (implicitly SSG in App Router).
+    *   Render a list of blog posts, displaying title, date, description, and linking to `/blog/[slug]`.
+    *   Implement basic page-level SEO: `<title>Blog | Montessori Find</title>`, relevant `<meta description>`.
+    *   Write tests for basic rendering and data display.
+    *   **Success Criteria:** `/blog` page builds statically, displays a list of posts fetched from Markdown files, links correctly, and has basic SEO tags.
+5.  **Blog Post Page (`/blog/[slug]`):**
+    *   Create the dynamic route `app/blog/[slug]/page.tsx`.
+    *   Implement `generateStaticParams` to return `{ slug: '...' }` for each post, using the slugs derived from filenames.
+    *   Implement the page component to:
+        *   Fetch full post data (including HTML content) using `getPostData(params.slug)`.
+        *   Render the post title, metadata (date, author), and HTML content.
+    *   Implement post-specific SEO:
+        *   Dynamic `<title>{post.title} | Montessori Find</title>`.
+        *   Dynamic `<meta name="description" content={post.description}>`.
+        *   Open Graph and Twitter Card meta tags using frontmatter data.
+    *   Write tests for data fetching, Markdown rendering, and presence of key SEO tags.
+    *   **Success Criteria:** Individual post pages `/blog/[slug]` build statically for each post, render content correctly, and have comprehensive, post-specific SEO meta tags.
+6.  **Structured Data (JSON-LD):**
+    *   In the Blog Post Page component (`app/blog/[slug]/page.tsx`), add a `<script type="application/ld+json">` tag.
+    *   Generate JSON-LD data conforming to the Schema.org `BlogPosting` type, using post metadata (headline, datePublished, dateModified, author, image, description, etc.).
+    *   **Success Criteria:** Rendered HTML source of blog post pages includes valid `BlogPosting` JSON-LD structured data.
+7.  **Styling:**
+    *   Apply basic Tailwind CSS styling to `app/blog/page.tsx` and `app/blog/[slug]/page.tsx` for readability and consistency with the rest of the site. Ensure code blocks within posts are styled appropriately.
+    *   **Success Criteria:** Blog index and post pages are visually appealing and readable.
+8.  **Sitemap:**
+    *   Update the sitemap generation logic (if exists, e.g., `app/sitemap.xml.ts`) to include URLs for the blog index page (`/blog`) and all individual blog post pages (`/blog/[slug]`).
+    *   **Success Criteria:** Generated sitemap includes all blog URLs.
+9.  **Testing & Review:**
+    *   Run `pnpm build` and `pnpm start` to test locally.
+    *   Manually review blog index and several post pages for content accuracy, layout, and SEO tag correctness (using browser dev tools).
+    *   Run any relevant automated tests (unit, integration, potentially E2E if configured).
+    *   **Success Criteria:** Blog builds successfully, functions correctly locally, passes manual review and automated tests.
+
+## Project Status Board (Blog Feature)
+
+*   [ ] **1. Standardize Frontmatter & Content** (Requires Manual Action)
+*   [x] **2. Setup & Dependencies**
+*   [x] **3. Blog Data Fetching Logic** (Implement utils + tests)
+*   [x] **4. Blog Index Page (`/blog`)** (Create page, fetch data, render list, basic SEO + tests)
+*   [x] **5. Blog Post Page (`/blog/[slug]`)** (Create page, `generateStaticParams`, fetch/render content, specific SEO + tests)
+*   [x] **6. Structured Data (JSON-LD)** (Implement schema on post pages)
+*   [x] **7. Styling** (Apply Tailwind styles)
+*   [ ] **8. Sitemap** (Update sitemap generation)
+*   [ ] **9. Testing & Review** (Build, manual review, automated tests)
+
+## Executor's Feedback or Assistance Requests (Blog Feature)
+
+- Task 4 (Blog Index Page) fix: Added 'use server' directive to ensure server-only rendering and allow use of fs, resolving the blank page issue.
+- Task 5 (Blog Post Page) complete: Implemented dynamic post page with SSG, SEO metadata, Open Graph/Twitter tags, and JSON-LD structured data. Uses Tailwind for styling and renders Markdown content as HTML.
+- Tasks 6-7 (Structured Data and Styling) complete: Both the blog index and post pages have been completely restyled to match the provided designs. Features include:
+  - Hero section with background image on the index page
+  - Card-based blog post grid with cover images and tag pills
+  - Full-width cover images on post pages
+  - Centered title with date and tags
+  - Enhanced typography for blog content including lists, blockquotes, and tables
+  - Newsletter signup section at the bottom of post pages
+  - Automatic tag extraction (with fallbacks if not specified in frontmatter)
+  - Consistent green color scheme matching the site's brand
+*   AMS verification details (AMSPathwayModal, ams_pathway_stage, and related UI) have been commented out on the school listings and detail pages. The code is still present for easy restoration later. No AMS details should now appear to users.
+
+## Lessons (Blog Feature)
+
+* For more complex Markdown parsing needs like interactive blogs, adding custom post-processing with regex replacements can greatly enhance the reading experience without requiring changes to the source Markdown files.
+* When dealing with domain-specific content (like Montessori education), adding special handling for common terms and organization names (MACTE, AMI/AMS) improves both SEO and user experience.
+* Using Tailwind's prose plugin with detailed modifiers provides fine-grained control over typography, but custom selectors like `[&_iframe]` may be needed for elements not directly covered.
+* Blog posts that contain tables, especially comparison tables, benefit from enhanced styling beyond what basic Markdown-to-HTML conversion provides.
+* For embedded content like YouTube videos, special handling is required to ensure responsive design and proper styling.
+
+# Background and Motivation
+The project currently uses Netlify functions to proxy Google Maps API requests, which is causing unnecessary costs. We need to reduce Netlify function invocations by pre-generating maps and geocodes at build time.
+
+# Key Challenges and Analysis
+1. The project uses Google Maps in two main ways:
+   - Geocoding addresses to get coordinates
+   - Generating static map images
+2. All school addresses are known at build time
+3. The data is stored in Supabase
+4. The maps are used in:
+   - School detail pages
+   - Map view component
+   - City pages
+
+# High-level Task Breakdown
+
+## Phase 1: Database Schema Updates
+1. Add new columns to schools table:
+   - [x] `geocode_data` (JSONB) - Store geocoding results
+   - [x] `static_map_url` (TEXT) - Store pre-generated static map URL
+   - [x] `coordinates` (JSONB) - Store lat/lng for map markers
+   - [x] Update School type in TypeScript code
+
+## Phase 2: Build-time Generation Script
+1. Create a new script `scripts/generate-maps.ts` that will:
+   - Fetch all schools from Supabase
+   - For each school:
+     - Call Google Maps API to geocode address
+     - Generate static map URL
+     - Update school record in Supabase with new data
+2. Add script to build process in `package.json`
+
+## Phase 3: Update Components
+1. Modify `SecureGoogleMap` component to:
+   - Use pre-generated data instead of making API calls
+   - Fall back to client-side API only if pre-generated data is missing
+2. Update `MapView` component to use pre-generated coordinates
+
+## Phase 4: Testing and Validation
+1. Add tests for new functionality
+2. Verify all map displays work correctly
+3. Test build process with new script
+
+# Project Status Board
+- [x] Database schema updates
+- [ ] Build-time generation script
+- [ ] Component updates
+- [ ] Testing and validation
+
+# Executor's Feedback or Assistance Requests
+Phase 1 (Database Schema Updates) is complete. We have:
+1. Created a SQL migration file (`supabase/migrations/20240321000000_add_map_columns.sql`) with functions to add the new columns
+2. Created a TypeScript script (`scripts/add-map-columns.ts`) to execute the migration
+3. Updated the School type in `lib/supabase.ts` to include the new columns
+
+Next steps:
+1. Run the migration script to add the columns to the database
+2. Proceed with Phase 2 (Build-time Generation Script)
+
+Would you like me to proceed with running the migration script?
+
+# Lessons
+- When adding new columns to a production database, always use idempotent operations (IF NOT EXISTS) to prevent errors if the script is run multiple times
+- For JSONB columns, it's helpful to define the TypeScript types upfront to ensure type safety throughout the application
+
+## Lessons
+
+*(Learnings and reusable patterns will be documented here)*
+*   Use `tsx` instead of `ts-node` for executing TS scripts in modern Node/Next.js projects to avoid module/extension errors.
+*   When updating Supabase records via script, prefer explicit `.update().eq()` over `.upsert()` if encountering unexpected constraint violations, especially if you know the records already exist.
+*   For large datasets in Supabase, always use pagination with `.range()` to avoid hitting the default 1000-record limit.
+*   When creating slug-based routes, having the actual slug stored in the database reduces complexity compared to calculating it on the fly (though we still need to calculate city_slugs).
+*   For URL parameters that need to be case-insensitive (like state abbreviations), standardize on lowercase in URLs (`/states/ca`) but convert to the appropriate case (uppercase) for database queries.
+*   In Next.js App Router, `generateStaticParams` at each route level can work seamlessly with nested dynamic routes to create a hierarchical structure of statically generated pages.
+*   When checking for non-unique slugs, it's better to fetch all matching items and filter them in the application logic rather than using database-level uniqueness constraints, especially when uniqueness depends on combinations of fields.
+*   In Next.js, avoid destructuring route parameters directly in component function parameters. Instead, first access `props.params` as a whole to prevent "params should be awaited before using its properties" warnings.
+*   When implementing automated tests for SEO, focus on key elements that search engines prioritize: title tags, meta descriptions, heading structure, and canonical URLs.
+*   For testing URL structures in a Next.js application, regular expressions provide a flexible way to define and validate URL patterns across the entire site.
+*   Simple performance testing can be done with fetch and measuring response time, but real-world performance depends on many factors like network conditions, browser rendering, and client-side JavaScript execution.
+*   When deploying to Netlify with pnpm, make sure the pnpm-lock.yaml file is always in sync with package.json to avoid CI build failures, as Netlify uses `--frozen-lockfile` by default.
+*   Always add null and type checks before calling methods like `trim()` on values that might come from external sources (like a database). For social media links or URLs, validate that the value is a string before processing it.
+
+---
+
+# Blog Feature Implementation
+
+## Background and Motivation
+
+The goal is to add a dynamic, SEO-friendly blog section to the Montessori Find V2 website. This leverages existing content provided as Markdown files in the `app/blog` directory. The blog aims to enhance user engagement by providing valuable information to parents searching for Montessori schools, improve site content depth, and contribute positively to SEO. The implementation should utilize Server-Side Rendering (SSR) or Static Site Generation (SSG) principles within the existing Next.js framework and adhere to SEO best practices.
+
+## Key Challenges and Analysis
+
+*   **Technology Choice:** Utilizing the existing Next.js App Router structure is optimal. Libraries like `gray-matter` (for frontmatter parsing) and `remark` with `remark-html` (for Markdown to HTML conversion) are suitable choices.
+*   **Routing:** Need to establish routes for the blog index (`/blog`) and individual posts (`/blog/[slug]`). The slugs will be derived from the Markdown filenames.
+*   **Markdown Processing:**
+    *   A robust function is required to read Markdown files from the `app/blog` directory.
+    *   Extract frontmatter (e.g., `title`, `date`, `description`, `author`, `image`) for metadata.
+    *   Convert Markdown body content to HTML for rendering.
+    *   Handle potential errors during file reading or parsing.
+*   **SEO:**
+    *   Implement dynamic generation of `<title>` and `<meta description>` tags based on frontmatter for both index and post pages.
+    *   Add Open Graph (`og:`) and Twitter Card (`twitter:`) meta tags for social sharing previews.
+    *   Incorporate structured data (Schema.org `BlogPosting`) for individual articles to enhance search engine understanding.
+    *   Ensure clean, descriptive URLs using slugs derived from filenames.
+    *   Consider adding internal linking features (e.g., "Related Posts") in the future.
+    *   Update or generate a `sitemap.xml` to include blog URLs.
+*   **Rendering Strategy:** Static Site Generation (SSG) using `generateStaticParams` (for post pages) and fetching data at build time (for index page) is the preferred approach for a blog with content that doesn't change in real-time. This offers the best performance and SEO benefits.
+*   **Content Structure:** Define a standard frontmatter structure for the Markdown files to ensure consistent metadata extraction (e.g., `title`, `date`, `description`, `author`, `coverImage`).
+*   **UI/UX:** Design and implement simple, clean, and readable layouts for the blog index (list of posts) and individual post pages.
+
+## High-level Task Breakdown
+
+1.  **Standardize Frontmatter & Content:**
+    *   Review existing `.md` files in `app/blog`.
+    *   Define and document a standard frontmatter structure (e.g., `title: string`, `date: YYYY-MM-DD`, `description: string`, `author?: string`, `coverImage?: string`).
+    *   **Action (Manual):** Update all existing `.md` files to conform to this structure. Add placeholder content to `10-benefits-of-montessori-education-for-early-learners.md` if it's meant to be included.
+    *   **Success Criteria:** All `.md` files in `app/blog` have consistent and complete frontmatter.
+2.  **Setup & Dependencies:**
+    *   Install necessary libraries: `npm install gray-matter remark remark-html` (or `pnpm add ...`).
+    *   **Success Criteria:** Dependencies installed successfully.
+3.  **Blog Data Fetching Logic:**
+    *   Create a utility function (e.g., in `lib/blog.ts`) to:
+        *   Read all `.md` files from the `app/blog` directory.
+        *   Parse frontmatter using `gray-matter`.
+        *   Generate a `slug` for each post (from filename).
+        *   Sort posts (e.g., by date descending).
+        *   Provide functions like `getAllPostsData()` (for index) and `getPostData(slug)` (for individual posts, including HTML content generation using `remark`).
+    *   Write unit tests for these utility functions.
+    *   **Success Criteria:** Utility functions correctly read, parse, sort posts, generate slugs, and convert Markdown to HTML. Tests pass.
+4.  **Blog Index Page (`/blog`):**
+    *   Create the route `app/blog/page.tsx`.
+    *   Use the `getAllPostsData()` utility to fetch metadata for all posts (title, slug, date, description) at build time (implicitly SSG in App Router).
+    *   Render a list of blog posts, displaying title, date, description, and linking to `/blog/[slug]`.
+    *   Implement basic page-level SEO: `<title>Blog | Montessori Find</title>`, relevant `<meta description>`.
+    *   Write tests for basic rendering and data display.
+    *   **Success Criteria:** `/blog` page builds statically, displays a list of posts fetched from Markdown files, links correctly, and has basic SEO tags.
+5.  **Blog Post Page (`/blog/[slug]`):**
+    *   Create the dynamic route `app/blog/[slug]/page.tsx`.
+    *   Implement `generateStaticParams` to return `{ slug: '...' }` for each post, using the slugs derived from filenames.
+    *   Implement the page component to:
+        *   Fetch full post data (including HTML content) using `getPostData(params.slug)`.
+        *   Render the post title, metadata (date, author), and HTML content.
+    *   Implement post-specific SEO:
+        *   Dynamic `<title>{post.title} | Montessori Find</title>`.
+        *   Dynamic `<meta name="description" content={post.description}>`.
+        *   Open Graph and Twitter Card meta tags using frontmatter data.
+    *   Write tests for data fetching, Markdown rendering, and presence of key SEO tags.
+    *   **Success Criteria:** Individual post pages `/blog/[slug]` build statically for each post, render content correctly, and have comprehensive, post-specific SEO meta tags.
+6.  **Structured Data (JSON-LD):**
+    *   In the Blog Post Page component (`app/blog/[slug]/page.tsx`), add a `<script type="application/ld+json">` tag.
+    *   Generate JSON-LD data conforming to the Schema.org `BlogPosting` type, using post metadata (headline, datePublished, dateModified, author, image, description, etc.).
+    *   **Success Criteria:** Rendered HTML source of blog post pages includes valid `BlogPosting` JSON-LD structured data.
+7.  **Styling:**
+    *   Apply basic Tailwind CSS styling to `app/blog/page.tsx` and `app/blog/[slug]/page.tsx` for readability and consistency with the rest of the site. Ensure code blocks within posts are styled appropriately.
+    *   **Success Criteria:** Blog index and post pages are visually appealing and readable.
+8.  **Sitemap:**
+    *   Update the sitemap generation logic (if exists, e.g., `app/sitemap.xml.ts`) to include URLs for the blog index page (`/blog`) and all individual blog post pages (`/blog/[slug]`).
+    *   **Success Criteria:** Generated sitemap includes all blog URLs.
+9.  **Testing & Review:**
+    *   Run `pnpm build` and `pnpm start` to test locally.
+    *   Manually review blog index and several post pages for content accuracy, layout, and SEO tag correctness (using browser dev tools).
+    *   Run any relevant automated tests (unit, integration, potentially E2E if configured).
+    *   **Success Criteria:** Blog builds successfully, functions correctly locally, passes manual review and automated tests.
+
+## Project Status Board (Blog Feature)
+
+*   [ ] **1. Standardize Frontmatter & Content** (Requires Manual Action)
+*   [x] **2. Setup & Dependencies**
+*   [x] **3. Blog Data Fetching Logic** (Implement utils + tests)
+*   [x] **4. Blog Index Page (`/blog`)** (Create page, fetch data, render list, basic SEO + tests)
+*   [x] **5. Blog Post Page (`/blog/[slug]`)** (Create page, `generateStaticParams`, fetch/render content, specific SEO + tests)
+*   [x] **6. Structured Data (JSON-LD)** (Implement schema on post pages)
+*   [x] **7. Styling** (Apply Tailwind styles)
+*   [ ] **8. Sitemap** (Update sitemap generation)
+*   [ ] **9. Testing & Review** (Build, manual review, automated tests)
+
+## Executor's Feedback or Assistance Requests (Blog Feature)
+
+- Task 4 (Blog Index Page) fix: Added 'use server' directive to ensure server-only rendering and allow use of fs, resolving the blank page issue.
+- Task 5 (Blog Post Page) complete: Implemented dynamic post page with SSG, SEO metadata, Open Graph/Twitter tags, and JSON-LD structured data. Uses Tailwind for styling and renders Markdown content as HTML.
+- Tasks 6-7 (Structured Data and Styling) complete: Both the blog index and post pages have been completely restyled to match the provided designs. Features include:
+  - Hero section with background image on the index page
+  - Card-based blog post grid with cover images and tag pills
+  - Full-width cover images on post pages
+  - Centered title with date and tags
+  - Enhanced typography for blog content including lists, blockquotes, and tables
+  - Newsletter signup section at the bottom of post pages
+  - Automatic tag extraction (with fallbacks if not specified in frontmatter)
+  - Consistent green color scheme matching the site's brand
+*   AMS verification details (AMSPathwayModal, ams_pathway_stage, and related UI) have been commented out on the school listings and detail pages. The code is still present for easy restoration later. No AMS details should now appear to users.
+
+## Lessons (Blog Feature)
+
+* For more complex Markdown parsing needs like interactive blogs, adding custom post-processing with regex replacements can greatly enhance the reading experience without requiring changes to the source Markdown files.
+* When dealing with domain-specific content (like Montessori education), adding special handling for common terms and organization names (MACTE, AMI/AMS) improves both SEO and user experience.
+* Using Tailwind's prose plugin with detailed modifiers provides fine-grained control over typography, but custom selectors like `[&_iframe]` may be needed for elements not directly covered.
+* Blog posts that contain tables, especially comparison tables, benefit from enhanced styling beyond what basic Markdown-to-HTML conversion provides.
+* For embedded content like YouTube videos, special handling is required to ensure responsive design and proper styling.
+
+# Background and Motivation
+The project currently uses Netlify functions to proxy Google Maps API requests, which is causing unnecessary costs. We need to reduce Netlify function invocations by pre-generating maps and geocodes at build time.
+
+# Key Challenges and Analysis
+1. The project uses Google Maps in two main ways:
+   - Geocoding addresses to get coordinates
+   - Generating static map images
+2. All school addresses are known at build time
+3. The data is stored in Supabase
+4. The maps are used in:
+   - School detail pages
+   - Map view component
+   - City pages
+
+# High-level Task Breakdown
+
+## Phase 1: Database Schema Updates
+1. Add new columns to schools table:
+   - [x] `geocode_data` (JSONB) - Store geocoding results
+   - [x] `static_map_url` (TEXT) - Store pre-generated static map URL
+   - [x] `coordinates` (JSONB) - Store lat/lng for map markers
+   - [x] Update School type in TypeScript code
+
+## Phase 2: Build-time Generation Script
+1. Create a new script `scripts/generate-maps.ts` that will:
+   - Fetch all schools from Supabase
+   - For each school:
+     - Call Google Maps API to geocode address
+     - Generate static map URL
+     - Update school record in Supabase with new data
+2. Add script to build process in `package.json`
+
+## Phase 3: Update Components
+1. Modify `SecureGoogleMap` component to:
+   - Use pre-generated data instead of making API calls
+   - Fall back to client-side API only if pre-generated data is missing
+2. Update `MapView` component to use pre-generated coordinates
+
+## Phase 4: Testing and Validation
+1. Add tests for new functionality
+2. Verify all map displays work correctly
+3. Test build process with new script
+
+# Project Status Board
+- [x] Database schema updates
+- [ ] Build-time generation script
+- [ ] Component updates
+- [ ] Testing and validation
+
+# Executor's Feedback or Assistance Requests
+Phase 1 (Database Schema Updates) is complete. We have:
+1. Created a SQL migration file (`supabase/migrations/20240321000000_add_map_columns.sql`) with functions to add the new columns
+2. Created a TypeScript script (`scripts/add-map-columns.ts`) to execute the migration
+3. Updated the School type in `lib/supabase.ts` to include the new columns
+
+Next steps:
+1. Run the migration script to add the columns to the database
+2. Proceed with Phase 2 (Build-time Generation Script)
+
+Would you like me to proceed with running the migration script?
+
+# Lessons
+- When adding new columns to a production database, always use idempotent operations (IF NOT EXISTS) to prevent errors if the script is run multiple times
+- For JSONB columns, it's helpful to define the TypeScript types upfront to ensure type safety throughout the application
+
+## Lessons
+
+*(Learnings and reusable patterns will be documented here)*
+*   Use `tsx` instead of `ts-node` for executing TS scripts in modern Node/Next.js projects to avoid module/extension errors.
+*   When updating Supabase records via script, prefer explicit `.update().eq()` over `.upsert()` if encountering unexpected constraint violations, especially if you know the records already exist.
+*   For large datasets in Supabase, always use pagination with `.range()` to avoid hitting the default 1000-record limit.
+*   When creating slug-based routes, having the actual slug stored in the database reduces complexity compared to calculating it on the fly (though we still need to calculate city_slugs).
+*   For URL parameters that need to be case-insensitive (like state abbreviations), standardize on lowercase in URLs (`/states/ca`) but convert to the appropriate case (uppercase) for database queries.
+*   In Next.js App Router, `generateStaticParams` at each route level can work seamlessly with nested dynamic routes to create a hierarchical structure of statically generated pages.
+*   When checking for non-unique slugs, it's better to fetch all matching items and filter them in the application logic rather than using database-level uniqueness constraints, especially when uniqueness depends on combinations of fields.
+*   In Next.js, avoid destructuring route parameters directly in component function parameters. Instead, first access `props.params` as a whole to prevent "params should be awaited before using its properties" warnings.
+*   When implementing automated tests for SEO, focus on key elements that search engines prioritize: title tags, meta descriptions, heading structure, and canonical URLs.
+*   For testing URL structures in a Next.js application, regular expressions provide a flexible way to define and validate URL patterns across the entire site.
+*   Simple performance testing can be done with fetch and measuring response time, but real-world performance depends on many factors like network conditions, browser rendering, and client-side JavaScript execution.
+*   When deploying to Netlify with pnpm, make sure the pnpm-lock.yaml file is always in sync with package.json to avoid CI build failures, as Netlify uses `--frozen-lockfile` by default.
+*   Always add null and type checks before calling methods like `trim()` on values that might come from external sources (like a database). For social media links or URLs, validate that the value is a string before processing it.
+
+---
+
+# Blog Feature Implementation
+
+## Background and Motivation
+
+The goal is to add a dynamic, SEO-friendly blog section to the Montessori Find V2 website. This leverages existing content provided as Markdown files in the `app/blog` directory. The blog aims to enhance user engagement by providing valuable information to parents searching for Montessori schools, improve site content depth, and contribute positively to SEO. The implementation should utilize Server-Side Rendering (SSR) or Static Site Generation (SSG) principles within the existing Next.js framework and adhere to SEO best practices.
+
+## Key Challenges and Analysis
+
+*   **Technology Choice:** Utilizing the existing Next.js App Router structure is optimal. Libraries like `gray-matter` (for frontmatter parsing) and `remark` with `remark-html` (for Markdown to HTML conversion) are suitable choices.
+*   **Routing:** Need to establish routes for the blog index (`/blog`) and individual posts (`/blog/[slug]`). The slugs will be derived from the Markdown filenames.
+*   **Markdown Processing:**
+    *   A robust function is required to read Markdown files from the `app/blog` directory.
+    *   Extract frontmatter (e.g., `title`, `date`, `description`, `author`, `image`) for metadata.
+    *   Convert Markdown body content to HTML for rendering.
+    *   Handle potential errors during file reading or parsing.
+*   **SEO:**
+    *   Implement dynamic generation of `<title>` and `<meta description>` tags based on frontmatter for both index and post pages.
+    *   Add Open Graph (`og:`) and Twitter Card (`twitter:`) meta tags for social sharing previews.
+    *   Incorporate structured data (Schema.org `BlogPosting`) for individual articles to enhance search engine understanding.
+    *   Ensure clean, descriptive URLs using slugs derived from filenames.
+    *   Consider adding internal linking features (e.g., "Related Posts") in the future.
+    *   Update or generate a `sitemap.xml` to include blog URLs.
+*   **Rendering Strategy:** Static Site Generation (SSG) using `generateStaticParams` (for post pages) and fetching data at build time (for index page) is the preferred approach for a blog with content that doesn't change in real-time. This offers the best performance and SEO benefits.
+*   **Content Structure:** Define a standard frontmatter structure for the Markdown files to ensure consistent metadata extraction (e.g., `title`, `date`, `description`, `author`, `coverImage`).
+*   **UI/UX:** Design and implement simple, clean, and readable layouts for the blog index (list of posts) and individual post pages.
+
+## High-level Task Breakdown
+
+1.  **Standardize Frontmatter & Content:**
+    *   Review existing `.md` files in `app/blog`.
+    *   Define and document a standard frontmatter structure (e.g., `title: string`, `date: YYYY-MM-DD`, `description: string`, `author?: string`, `coverImage?: string`).
+    *   **Action (Manual):** Update all existing `.md` files to conform to this structure. Add placeholder content to `10-benefits-of-montessori-education-for-early-learners.md` if it's meant to be included.
+    *   **Success Criteria:** All `.md` files in `app/blog` have consistent and complete frontmatter.
+2.  **Setup & Dependencies:**
+    *   Install necessary libraries: `npm install gray-matter remark remark-html` (or `pnpm add ...`).
+    *   **Success Criteria:** Dependencies installed successfully.
+3.  **Blog Data Fetching Logic:**
+    *   Create a utility function (e.g., in `lib/blog.ts`) to:
+        *   Read all `.md` files from the `app/blog` directory.
+        *   Parse frontmatter using `gray-matter`.
+        *   Generate a `slug` for each post (from filename).
+        *   Sort posts (e.g., by date descending).
+        *   Provide functions like `getAllPostsData()` (for index) and `getPostData(slug)` (for individual posts, including HTML content generation using `remark`).
+    *   Write unit tests for these utility functions.
+    *   **Success Criteria:** Utility functions correctly read, parse, sort posts, generate slugs, and convert Markdown to HTML. Tests pass.
+4.  **Blog Index Page (`/blog`):**
+    *   Create the route `app/blog/page.tsx`.
+    *   Use the `getAllPostsData()` utility to fetch metadata for all posts (title, slug, date, description) at build time (implicitly SSG in App Router).
+    *   Render a list of blog posts, displaying title, date, description, and linking to `/blog/[slug]`.
+    *   Implement basic page-level SEO: `<title>Blog | Montessori Find</title>`, relevant `<meta description>`.
+    *   Write tests for basic rendering and data display.
+    *   **Success Criteria:** `/blog` page builds statically, displays a list of posts fetched from Markdown files, links correctly, and has basic SEO tags.
+5.  **Blog Post Page (`/blog/[slug]`):**
+    *   Create the dynamic route `app/blog/[slug]/page.tsx`.
+    *   Implement `generateStaticParams` to return `{ slug: '...' }` for each post, using the slugs derived from filenames.
+    *   Implement the page component to:
+        *   Fetch full post data (including HTML content) using `getPostData(params.slug)`.
+        *   Render the post title, metadata (date, author), and HTML content.
+    *   Implement post-specific SEO:
+        *   Dynamic `<title>{post.title} | Montessori Find</title>`.
+        *   Dynamic `<meta name="description" content={post.description}>`.
+        *   Open Graph and Twitter Card meta tags using frontmatter data.
+    *   Write tests for data fetching, Markdown rendering, and presence of key SEO tags.
+    *   **Success Criteria:** Individual post pages `/blog/[slug]` build statically for each post, render content correctly, and have comprehensive, post-specific SEO meta tags.
+6.  **Structured Data (JSON-LD):**
+    *   In the Blog Post Page component (`app/blog/[slug]/page.tsx`), add a `<script type="application/ld+json">` tag.
+    *   Generate JSON-LD data conforming to the Schema.org `BlogPosting` type, using post metadata (headline, datePublished, dateModified, author, image, description, etc.).
+    *   **Success Criteria:** Rendered HTML source of blog post pages includes valid `BlogPosting` JSON-LD structured data.
+7.  **Styling:**
+    *   Apply basic Tailwind CSS styling to `app/blog/page.tsx` and `app/blog/[slug]/page.tsx` for readability and consistency with the rest of the site. Ensure code blocks within posts are styled appropriately.
+    *   **Success Criteria:** Blog index and post pages are visually appealing and readable.
+8.  **Sitemap:**
+    *   Update the sitemap generation logic (if exists, e.g., `app/sitemap.xml.ts`) to include URLs for the blog index page (`/blog`) and all individual blog post pages (`/blog/[slug]`).
+    *   **Success Criteria:** Generated sitemap includes all blog URLs.
+9.  **Testing & Review:**
+    *   Run `pnpm build` and `pnpm start` to test locally.
+    *   Manually review blog index and several post pages for content accuracy, layout, and SEO tag correctness (using browser dev tools).
+    *   Run any relevant automated tests (unit, integration, potentially E2E if configured).
+    *   **Success Criteria:** Blog builds successfully, functions correctly locally, passes manual review and automated tests.
+
+## Project Status Board (Blog Feature)
+
+*   [ ] **1. Standardize Frontmatter & Content** (Requires Manual Action)
+*   [x] **2. Setup & Dependencies**
+*   [x] **3. Blog Data Fetching Logic** (Implement utils + tests)
+*   [x] **4. Blog Index Page (`/blog`)** (Create page, fetch data, render list, basic SEO + tests)
+*   [x] **5. Blog Post Page (`/blog/[slug]`)** (Create page, `generateStaticParams`, fetch/render content, specific SEO + tests)
+*   [x] **6. Structured Data (JSON-LD)** (Implement schema on post pages)
+*   [x] **7. Styling** (Apply Tailwind styles)
+*   [ ] **8. Sitemap** (Update sitemap generation)
+*   [ ] **9. Testing & Review** (Build, manual review, automated tests)
+
+## Executor's Feedback or Assistance Requests (Blog Feature)
+
+- Task 4 (Blog Index Page) fix: Added 'use server' directive to ensure server-only rendering and allow use of fs, resolving the blank page issue.
+- Task 5 (Blog Post Page) complete: Implemented dynamic post page with SSG, SEO metadata, Open Graph/Twitter tags, and JSON-LD structured data. Uses Tailwind for styling and renders Markdown content as HTML.
+- Tasks 6-7 (Structured Data and Styling) complete: Both the blog index and post pages have been completely restyled to match the provided designs. Features include:
+  - Hero section with background image on the index page
+  - Card-based blog post grid with cover images and tag pills
+  - Full-width cover images on post pages
+  - Centered title with date and tags
+  - Enhanced typography for blog content including lists, blockquotes, and tables
+  - Newsletter signup section at the bottom of post pages
+  - Automatic tag extraction (with fallbacks if not specified in frontmatter)
+  - Consistent green color scheme matching the site's brand
+*   AMS verification details (AMSPathwayModal, ams_pathway_stage, and related UI) have been commented out on the school listings and detail pages. The code is still present for easy restoration later. No AMS details should now appear to users.
+
+## Lessons (Blog Feature)
+
+* For more complex Markdown parsing needs like interactive blogs, adding custom post-processing with regex replacements can greatly enhance the reading experience without requiring changes to the source Markdown files.
+* When dealing with domain-specific content (like Montessori education), adding special handling for common terms and organization names (MACTE, AMI/AMS) improves both SEO and user experience.
+* Using Tailwind's prose plugin with detailed modifiers provides fine-grained control over typography, but custom selectors like `[&_iframe]` may be needed for elements not directly covered.
+* Blog posts that contain tables, especially comparison tables, benefit from enhanced styling beyond what basic Markdown-to-HTML conversion provides.
+* For embedded content like YouTube videos, special handling is required to ensure responsive design and proper styling.
+
+# Background and Motivation
+The project currently uses Netlify functions to proxy Google Maps API requests, which is causing unnecessary costs. We need to reduce Netlify function invocations by pre-generating maps and geocodes at build time.
+
+# Key Challenges and Analysis
+1. The project uses Google Maps in two main ways:
+   - Geocoding addresses to get coordinates
+   - Generating static map images
+2. All school addresses are known at build time
+3. The data is stored in Supabase
+4. The maps are used in:
+   - School detail pages
+   - Map view component
+   - City pages
+
+# High-level Task Breakdown
+
+## Phase 1: Database Schema Updates
+1. Add new columns to schools table:
+   - [x] `geocode_data` (JSONB) - Store geocoding results
+   - [x] `static_map_url` (TEXT) - Store pre-generated static map URL
+   - [x] `coordinates` (JSONB) - Store lat/lng for map markers
+   - [x] Update School type in TypeScript code
+
+## Phase 2: Build-time Generation Script
+1. Create a new script `scripts/generate-maps.ts` that will:
+   - Fetch all schools from Supabase
+   - For each school:
+     - Call Google Maps API to geocode address
+     - Generate static map URL
+     - Update school record in Supabase with new data
+2. Add script to build process in `package.json`
+
+## Phase 3: Update Components
+1. Modify `SecureGoogleMap` component to:
+   - Use pre-generated data instead of making API calls
+   - Fall back to client-side API only if pre-generated data is missing
+2. Update `MapView` component to use pre-generated coordinates
+
+## Phase 4: Testing and Validation
+1. Add tests for new functionality
+2. Verify all map displays work correctly
+3. Test build process with new script
+
+# Project Status Board
+- [x] Database schema updates
+- [ ] Build-time generation script
+- [ ] Component updates
+- [ ] Testing and validation
+
+# Executor's Feedback or Assistance Requests
+Phase 1 (Database Schema Updates) is complete. We have:
+1. Created a SQL migration file (`supabase/migrations/20240321000000_add_map_columns.sql`) with functions to add the new columns
+2. Created a TypeScript script (`scripts/add-map-columns.ts`) to execute the migration
+3. Updated the School type in `lib/supabase.ts` to include the new columns
+
+Next steps:
+1. Run the migration script to add the columns to the database
+2. Proceed with Phase 2 (Build-time Generation Script)
+
+Would you like me to proceed with running the migration script?
+
+# Lessons
+- When adding new columns to a production database, always use idempotent operations (IF NOT EXISTS) to prevent errors if the script is run multiple times
+- For JSONB columns, it's helpful to define the TypeScript types upfront to ensure type safety throughout the application
+
+## Lessons
+
+*(Learnings and reusable patterns will be documented here)*
+*   Use `tsx` instead of `ts-node` for executing TS scripts in modern Node/Next.js projects to avoid module/extension errors.
+*   When updating Supabase records via script, prefer explicit `.update().eq()` over `.upsert()` if encountering unexpected constraint violations, especially if you know the records already exist.
+*   For large datasets in Supabase, always use pagination with `.range()` to avoid hitting the default 1000-record limit.
+*   When creating slug-based routes, having the actual slug stored in the database reduces complexity compared to calculating it on the fly (though we still need to calculate city_slugs).
+*   For URL parameters that need to be case-insensitive (like state abbreviations), standardize on lowercase in URLs (`/states/ca`) but convert to the appropriate case (uppercase) for database queries.
+*   In Next.js App Router, `generateStaticParams` at each route level can work seamlessly with nested dynamic routes to create a hierarchical structure of statically generated pages.
+*   When checking for non-unique slugs, it's better to fetch all matching items and filter them in the application logic rather than using database-level uniqueness constraints, especially when uniqueness depends on combinations of fields.
+*   In Next.js, avoid destructuring route parameters directly in component function parameters. Instead, first access `props.params` as a whole to prevent "params should be awaited before using its properties" warnings.
+*   When implementing automated tests for SEO, focus on key elements that search engines prioritize: title tags, meta descriptions, heading structure, and canonical URLs.
+*   For testing URL structures in a Next.js application, regular expressions provide a flexible way to define and validate URL patterns across the entire site.
+*   Simple performance testing can be done with fetch and measuring response time, but real-world performance depends on many factors like network conditions, browser rendering, and client-side JavaScript execution.
+*   When deploying to Netlify with pnpm, make sure the pnpm-lock.yaml file is always in sync with package.json to avoid CI build failures, as Netlify uses `--frozen-lockfile` by default.
+*   Always add null and type checks before calling methods like `trim()` on values that might come from external sources (like a database). For social media links or URLs, validate that the value is a string before processing it.
+
+---
+
+# Blog Feature Implementation
+
+## Background and Motivation
+
+The goal is to add a dynamic, SEO-friendly blog section to the Montessori Find V2 website. This leverages existing content provided as Markdown files in the `app/blog` directory. The blog aims to enhance user engagement by providing valuable information to parents searching for Montessori schools, improve site content depth, and contribute positively to SEO. The implementation should utilize Server-Side Rendering (SSR) or Static Site Generation (SSG) principles within the existing Next.js framework and adhere to SEO best practices.
+
+## Key Challenges and Analysis
+
+*   **Technology Choice:** Utilizing the existing Next.js App Router structure is optimal. Libraries like `gray-matter` (for frontmatter parsing) and `remark` with `remark-html` (for Markdown to HTML conversion) are suitable choices.
+*   **Routing:** Need to establish routes for the blog index (`/blog`) and individual posts (`/blog/[slug]`). The slugs will be derived from the Markdown filenames.
+*   **Markdown Processing:**
+    *   A robust function is required to read Markdown files from the `app/blog` directory.
+    *   Extract frontmatter (e.g., `title`, `date`, `description`, `author`, `image`) for metadata.
+    *   Convert Markdown body content to HTML for rendering.
+    *   Handle potential errors during file reading or parsing.
+*   **SEO:**
+    *   Implement dynamic generation of `<title>` and `<meta description>` tags based on frontmatter for both index and post pages.
+    *   Add Open Graph (`og:`) and Twitter Card (`twitter:`) meta tags for social sharing previews.
+    *   Incorporate structured data (Schema.org `BlogPosting`) for individual articles to enhance search engine understanding.
+    *   Ensure clean, descriptive URLs using slugs derived from filenames.
+    *   Consider adding internal linking features (e.g., "Related Posts") in the future.
+    *   Update or generate a `sitemap.xml` to include blog URLs.
+*   **Rendering Strategy:** Static Site Generation (SSG) using `generateStaticParams` (for post pages) and fetching data at build time (for index page) is the preferred approach for a blog with content that doesn't change in real-time. This offers the best performance and SEO benefits.
+*   **Content Structure:** Define a standard frontmatter structure for the Markdown files to ensure consistent metadata extraction (e.g., `title`, `date`, `description`, `author`, `coverImage`).
+*   **UI/UX:** Design and implement simple, clean, and readable layouts for the blog index (list of posts) and individual post pages.
+
+## High-level Task Breakdown
+
+1.  **Standardize Frontmatter & Content:**
+    *   Review existing `.md` files in `app/blog`.
+    *   Define and document a standard frontmatter structure (e.g., `title: string`, `date: YYYY-MM-DD`, `description: string`, `author?: string`, `coverImage?: string`).
+    *   **Action (Manual):** Update all existing `.md` files to conform to this structure. Add placeholder content to `10-benefits-of-montessori-education-for-early-learners.md` if it's meant to be included.
+    *   **Success Criteria:** All `.md` files in `app/blog` have consistent and complete frontmatter.
+2.  **Setup & Dependencies:**
+    *   Install necessary libraries: `npm install gray-matter remark remark-html` (or `pnpm add ...`).
+    *   **Success Criteria:** Dependencies installed successfully.
+3.  **Blog Data Fetching Logic:**
+    *   Create a utility function (e.g., in `lib/blog.ts`) to:
+        *   Read all `.md` files from the `app/blog` directory.
+        *   Parse frontmatter using `gray-matter`.
+        *   Generate a `slug` for each post (from filename).
+        *   Sort posts (e.g., by date descending).
+        *   Provide functions like `getAllPostsData()` (for index) and `getPostData(slug)` (for individual posts, including HTML content generation using `remark`).
+    *   Write unit tests for these utility functions.
+    *   **Success Criteria:** Utility functions correctly read, parse, sort posts, generate slugs, and convert Markdown to HTML. Tests pass.
+4.  **Blog Index Page (`/blog`):**
+    *   Create the route `app/blog/page.tsx`.
+    *   Use the `getAllPostsData()` utility to fetch metadata for all posts (title, slug, date, description) at build time (implicitly SSG in App Router).
+    *   Render a list of blog posts, displaying title, date, description, and linking to `/blog/[slug]`.
+    *   Implement basic page-level SEO: `<title>Blog | Montessori Find</title>`, relevant `<meta description>`.
+    *   Write tests for basic rendering and data display.
+    *   **Success Criteria:** `/blog` page builds statically, displays a list of posts fetched from Markdown files, links correctly, and has basic SEO tags.
+5.  **Blog Post Page (`/blog/[slug]`):**
+    *   Create the dynamic route `app/blog/[slug]/page.tsx`.
+    *   Implement `generateStaticParams` to return `{ slug: '...' }` for each post, using the slugs derived from filenames.
+    *   Implement the page component to:
+        *   Fetch full post data (including HTML content) using `getPostData(params.slug)`.
+        *   Render the post title, metadata (date, author), and HTML content.
+    *   Implement post-specific SEO:
+        *   Dynamic `<title>{post.title} | Montessori Find</title>`.
+        *   Dynamic `<meta name="description" content={post.description}>`.
+        *   Open Graph and Twitter Card meta tags using frontmatter data.
+    *   Write tests for data fetching, Markdown rendering, and presence of key SEO tags.
+    *   **Success Criteria:** Individual post pages `/blog/[slug]` build statically for each post, render content correctly, and have comprehensive, post-specific SEO meta tags.
+6.  **Structured Data (JSON-LD):**
+    *   In the Blog Post Page component (`app/blog/[slug]/page.tsx`), add a `<script type="application/ld+json">` tag.
+    *   Generate JSON-LD data conforming to the Schema.org `BlogPosting` type, using post metadata (headline, datePublished, dateModified, author, image, description, etc.).
+    *   **Success Criteria:** Rendered HTML source of blog post pages includes valid `BlogPosting` JSON-LD structured data.
+7.  **Styling:**
+    *   Apply basic Tailwind CSS styling to `app/blog/page.tsx` and `app/blog/[slug]/page.tsx` for readability and consistency with the rest of the site. Ensure code blocks within posts are styled appropriately.
+    *   **Success Criteria:** Blog index and post pages are visually appealing and readable.
+8.  **Sitemap:**
+    *   Update the sitemap generation logic (if exists, e.g., `app/sitemap.xml.ts`) to include URLs for the blog index page (`/blog`) and all individual blog post pages (`/blog/[slug]`).
+    *   **Success Criteria:** Generated sitemap includes all blog URLs.
+9.  **Testing & Review:**
+    *   Run `pnpm build` and `pnpm start` to test locally.
+    *   Manually review blog index and several post pages for content accuracy, layout, and SEO tag correctness (using browser dev tools).
+    *   Run any relevant automated tests (unit, integration, potentially E2E if configured).
+    *   **Success Criteria:** Blog builds successfully, functions correctly locally, passes manual review and automated tests.
+
+## Project Status Board (Blog Feature)
+
+*   [ ] **1. Standardize Frontmatter & Content** (Requires Manual Action)
+*   [x] **2. Setup & Dependencies**
+*   [x] **3. Blog Data Fetching Logic** (Implement utils + tests)
+*   [x] **4. Blog Index Page (`/blog`)** (Create page, fetch data, render list, basic SEO + tests)
+*   [x] **5. Blog Post Page (`/blog/[slug]`)** (Create page, `generateStaticParams`, fetch/render content, specific SEO + tests)
+*   [x] **6. Structured Data (JSON-LD)** (Implement schema on post pages)
+*   [x] **7. Styling** (Apply Tailwind styles)
+*   [ ] **8. Sitemap** (Update sitemap generation)
+*   [ ] **9. Testing & Review** (Build, manual review, automated tests)
+
+## Executor's Feedback or Assistance Requests (Blog Feature)
+
+- Task 4 (Blog Index Page) fix: Added 'use server' directive to ensure server-only rendering and allow use of fs, resolving the blank page issue.
+- Task 5 (Blog Post Page) complete: Implemented dynamic post page with SSG, SEO metadata, Open Graph/Twitter tags, and JSON-LD structured data. Uses Tailwind for styling and renders Markdown content as HTML.
+- Tasks 6-7 (Structured Data and Styling) complete: Both the blog index and post pages have been completely restyled to match the provided designs. Features include:
+  - Hero section with background image on the index page
+  - Card-based blog post grid with cover images and tag pills
+  - Full-width cover images on post pages
+  - Centered title with date and tags
+  - Enhanced typography for blog content including lists, blockquotes, and tables
+  - Newsletter signup section at the bottom of post pages
+  - Automatic tag extraction (with fallbacks if not specified in frontmatter)
+  - Consistent green color scheme matching the site's brand
+*   AMS verification details (AMSPathwayModal, ams_pathway_stage, and related UI) have been commented out on the school listings and detail pages. The code is still present for easy restoration later. No AMS details should now appear to users.
+
+## Lessons (Blog Feature)
+
+* For more complex Markdown parsing needs like interactive blogs, adding custom post-processing with regex replacements can greatly enhance the reading experience without requiring changes to the source Markdown files.
+* When dealing with domain-specific content (like Montessori education), adding special handling for common terms and organization names (MACTE, AMI/AMS) improves both SEO and user experience.
+* Using Tailwind's prose plugin with detailed modifiers provides fine-grained control over typography, but custom selectors like `[&_iframe]` may be needed for elements not directly covered.
+* Blog posts that contain tables, especially comparison tables, benefit from enhanced styling beyond what basic Markdown-to-HTML conversion provides.
+* For embedded content like YouTube videos, special handling is required to ensure responsive design and proper styling.
+
+# Background and Motivation
+The project currently uses Netlify functions to proxy Google Maps API requests, which is causing unnecessary costs. We need to reduce Netlify function invocations by pre-generating maps and geocodes at build time.
+
+# Key Challenges and Analysis
+1. The project uses Google Maps in two main ways:
+   - Geocoding addresses to get coordinates
+   - Generating static map images
+2. All school addresses are known at build time
+3. The data is stored in Supabase
+4. The maps are used in:
+   - School detail pages
+   - Map view component
+   - City pages
+
+# High-level Task Breakdown
+
+## Phase 1: Database Schema Updates
+1. Add new columns to schools table:
+   - [x] `geocode_data` (JSONB) - Store geocoding results
+   - [x] `static_map_url` (TEXT) - Store pre-generated static map URL
+   - [x] `coordinates` (JSONB) - Store lat/lng for map markers
+   - [x] Update School type in TypeScript code
+
+## Phase 2: Build-time Generation Script
+1. Create a new script `scripts/generate-maps.ts` that will:
+   - Fetch all schools from Supabase
+   - For each school:
+     - Call Google Maps API to geocode address
+     - Generate static map URL
+     - Update school record in Supabase with new data
+2. Add script to build process in `package.json`
+
+## Phase 3: Update Components
+1. Modify `SecureGoogleMap` component to:
+   - Use pre-generated data instead of making API calls
+   - Fall back to client-side API only if pre-generated data is missing
+2. Update `MapView` component to use pre-generated coordinates
+
+## Phase 4: Testing and Validation
+1. Add tests for new functionality
+2. Verify all map displays work correctly
+3. Test build process with new script
+
+# Project Status Board
+- [x] Database schema updates
+- [ ] Build-time generation script
+- [ ] Component updates
+- [ ] Testing and validation
+
+# Executor's Feedback or Assistance Requests
+Phase 1 (Database Schema Updates) is complete. We have:
+1. Created a SQL migration file (`supabase/migrations/20240321000000_add_map_columns.sql`) with functions to add the new columns
+2. Created a TypeScript script (`scripts/add-map-columns.ts`) to execute the migration
+3. Updated the School type in `lib/supabase.ts` to include the new columns
+
+Next steps:
+1. Run the migration script to add the columns to the database
+2. Proceed with Phase 2 (Build-time Generation Script)
+
+Would you like me to proceed with running the migration script?
+
+# Lessons
+- When adding new columns to a production database, always use idempotent operations (IF NOT EXISTS) to prevent errors if the script is run multiple times
+- For JSONB columns, it's helpful to define the TypeScript types upfront to ensure type safety throughout the application
+
+## Lessons
+
+*(Learnings and reusable patterns will be documented here)*
+*   Use `tsx` instead of `ts-node` for executing TS scripts in modern Node/Next.js projects to avoid module/extension errors.
+*   When updating Supabase records via script, prefer explicit `.update().eq()` over `.upsert()` if encountering unexpected constraint violations, especially if you know the records already exist.
+*   For large datasets in Supabase, always use pagination with `.range()` to avoid hitting the default 1000-record limit.
+*   When creating slug-based routes, having the actual slug stored in the database reduces complexity compared to calculating it on the fly (though we still need to calculate city_slugs).
+*   For URL parameters that need to be case-insensitive (like state abbreviations), standardize on lowercase in URLs (`/states/ca`) but convert to the appropriate case (uppercase) for database queries.
+*   In Next.js App Router, `generateStaticParams` at each route level can work seamlessly with nested dynamic routes to create a hierarchical structure of statically generated pages.
+*   When checking for non-unique slugs, it's better to fetch all matching items and filter them in the application logic rather than using database-level uniqueness constraints, especially when uniqueness depends on combinations of fields.
+*   In Next.js, avoid destructuring route parameters directly in component function parameters. Instead, first access `props.params` as a whole to prevent "params should be awaited before using its properties" warnings.
+*   When implementing automated tests for SEO, focus on key elements that search engines prioritize: title tags, meta descriptions, heading structure, and canonical URLs.
+*   For testing URL structures in a Next.js application, regular expressions provide a flexible way to define and validate URL patterns across the entire site.
+*   Simple performance testing can be done with fetch and measuring response time, but real-world performance depends on many factors like network conditions, browser rendering, and client-side JavaScript execution.
+*   When deploying to Netlify with pnpm, make sure the pnpm-lock.yaml file is always in sync with package.json to avoid CI build failures, as Netlify uses `--frozen-lockfile` by default.
+*   Always add null and type checks before calling methods like `trim()` on values that might come from external sources (like a database). For social media links or URLs, validate that the value is a string before processing it.
+
+---
+
+# Blog Feature Implementation
+
+## Background and Motivation
+
+The goal is to add a dynamic, SEO-friendly blog section to the Montessori Find V2 website. This leverages existing content provided as Markdown files in the `app/blog` directory. The blog aims to enhance user engagement by providing valuable information to parents searching for Montessori schools, improve site content depth, and contribute positively to SEO. The implementation should utilize Server-Side Rendering (SSR) or Static Site Generation (SSG) principles within the existing Next.js framework and adhere to SEO best practices.
+
+## Key Challenges and Analysis
+
+*   **Technology Choice:** Utilizing the existing Next.js App Router structure is optimal. Libraries like `gray-matter` (for frontmatter parsing) and `remark` with `remark-html` (for Markdown to HTML conversion) are suitable choices.
+*   **Routing:** Need to establish routes for the blog index (`/blog`) and individual posts (`/blog/[slug]`). The slugs will be derived from the Markdown filenames.
+*   **Markdown Processing:**
+    *   A robust function is required to read Markdown files from the `app/blog` directory.
+    *   Extract frontmatter (e.g., `title`, `date`, `description`, `author`, `image`) for metadata.
+    *   Convert Markdown body content to HTML for rendering.
+    *   Handle potential errors during file reading or parsing.
+*   **SEO:**
+    *   Implement dynamic generation of `<title>` and `<meta description>` tags based on frontmatter for both index and post pages.
+    *   Add Open Graph (`og:`) and Twitter Card (`twitter:`) meta tags for social sharing previews.
+    *   Incorporate structured data (Schema.org `BlogPosting`) for individual articles to enhance search engine understanding.
+    *   Ensure clean, descriptive URLs using slugs derived from filenames.
+    *   Consider adding internal linking features (e.g., "Related Posts") in the future.
+    *   Update or generate a `sitemap.xml` to include blog URLs.
+*   **Rendering Strategy:** Static Site Generation (SSG) using `generateStaticParams` (for post pages) and fetching data at build time (for index page) is the preferred approach for a blog with content that doesn't change in real-time. This offers the best performance and SEO benefits.
+*   **Content Structure:** Define a standard frontmatter structure for the Markdown files to ensure consistent metadata extraction (e.g., `title`, `date`, `description`, `author`, `coverImage`).
+*   **UI/UX:** Design and implement simple, clean, and readable layouts for the blog index (list of posts) and individual post pages.
+
+## High-level Task Breakdown
+
+1.  **Standardize Frontmatter & Content:**
+    *   Review existing `.md` files in `app/blog`.
+    *   Define and document a standard frontmatter structure (e.g., `title: string`, `date: YYYY-MM-DD`, `description: string`, `author?: string`, `coverImage?: string`).
+    *   **Action (Manual):** Update all existing `.md` files to conform to this structure. Add placeholder content to `10-benefits-of-montessori-education-for-early-learners.md` if it's meant to be included.
+    *   **Success Criteria:** All `.md` files in `app/blog` have consistent and complete frontmatter.
+2.  **Setup & Dependencies:**
+    *   Install necessary libraries: `npm install gray-matter remark remark-html` (or `pnpm add ...`).
+    *   **Success Criteria:** Dependencies installed successfully.
+3.  **Blog Data Fetching Logic:**
+    *   Create a utility function (e.g., in `lib/blog.ts`) to:
+        *   Read all `.md` files from the `app/blog` directory.
+        *   Parse frontmatter using `gray-matter`.
+        *   Generate a `slug` for each post (from filename).
+        *   Sort posts (e.g., by date descending).
+        *   Provide functions like `getAllPostsData()` (for index) and `getPostData(slug)` (for individual posts, including HTML content generation using `remark`).
+    *   Write unit tests for these utility functions.
+    *   **Success Criteria:** Utility functions correctly read, parse, sort posts, generate slugs, and convert Markdown to HTML. Tests pass.
+4.  **Blog Index Page (`/blog`):**
+    *   Create the route `app/blog/page.tsx`.
+    *   Use the `getAllPostsData()` utility to fetch metadata for all posts (title, slug, date, description) at build time (implicitly SSG in App Router).
+    *   Render a list of blog posts, displaying title, date, description, and linking to `/blog/[slug]`.
+    *   Implement basic page-level SEO: `<title>Blog | Montessori Find</title>`, relevant `<meta description>`.
+    *   Write tests for basic rendering and data display.
+    *   **Success Criteria:** `/blog` page builds statically, displays a list of posts fetched from Markdown files, links correctly, and has basic SEO tags.
+5.  **Blog Post Page (`/blog/[slug]`):**
+    *   Create the dynamic route `app/blog/[slug]/page.tsx`.
+    *   Implement `generateStaticParams` to return `{ slug: '...' }` for each post, using the slugs derived from filenames.
+    *   Implement the page component to:
+        *   Fetch full post data (including HTML content) using `getPostData(params.slug)`.
+        *   Render the post title, metadata (date, author), and HTML content.
+    *   Implement post-specific SEO:
+        *   Dynamic `<title>{post.title} | Montessori Find</title>`.
+        *   Dynamic `<meta name="description" content={post.description}>`.
+        *   Open Graph and Twitter Card meta tags using frontmatter data.
+    *   Write tests for data fetching, Markdown rendering, and presence of key SEO tags.
+    *   **Success Criteria:** Individual post pages `/blog/[slug]` build statically for each post, render content correctly, and have comprehensive, post-specific SEO meta tags.
+6.  **Structured Data (JSON-LD):**
+    *   In the Blog Post Page component (`app/blog/[slug]/page.tsx`), add a `<script type="application/ld+json">` tag.
+    *   Generate JSON-LD data conforming to the Schema.org `BlogPosting` type, using post metadata (headline, datePublished, dateModified, author, image, description, etc.).
+    *   **Success Criteria:** Rendered HTML source of blog post pages includes valid `BlogPosting` JSON-LD structured data.
+7.  **Styling:**
+    *   Apply basic Tailwind CSS styling to `app/blog/page.tsx` and `app/blog/[slug]/page.tsx` for readability and consistency with the rest of the site. Ensure code blocks within posts are styled appropriately.
+    *   **Success Criteria:** Blog index and post pages are visually appealing and readable.
+8.  **Sitemap:**
+    *   Update the sitemap generation logic (if exists, e.g., `app/sitemap.xml.ts`) to include URLs for the blog index page (`/blog`) and all individual blog post pages (`/blog/[slug]`).
+    *   **Success Criteria:** Generated sitemap includes all blog URLs.
+9.  **Testing & Review:**
+    *   Run `pnpm build` and `pnpm start` to test locally.
+    *   Manually review blog index and several post pages for content accuracy, layout, and SEO tag correctness (using browser dev tools).
+    *   Run any relevant automated tests (unit, integration, potentially E2E if configured).
+    *   **Success Criteria:** Blog builds successfully, functions correctly locally, passes manual review and automated tests.
+
+## Project Status Board (Blog Feature)
+
+*   [ ] **1. Standardize Frontmatter & Content** (Requires Manual Action)
+*   [x] **2. Setup & Dependencies**
+*   [x] **3. Blog Data Fetching Logic** (Implement utils + tests)
+*   [x] **4. Blog Index Page (`/blog`)** (Create page, fetch data, render list, basic SEO + tests)
+*   [x] **5. Blog Post Page (`/blog/[slug]`)** (Create page, `generateStaticParams`, fetch/render content, specific SEO + tests)
+*   [x] **6. Structured Data (JSON-LD)** (Implement schema on post pages)
+*   [x] **7. Styling** (Apply Tailwind styles)
+*   [ ] **8. Sitemap** (Update sitemap generation)
+*   [ ] **9. Testing & Review** (Build, manual review, automated tests)
+
+## Executor's Feedback or Assistance Requests (Blog Feature)
+
+- Task 4 (Blog Index Page) fix: Added 'use server' directive to ensure server-only rendering and allow use of fs, resolving the blank page issue.
+- Task 5 (Blog Post Page) complete: Implemented dynamic post page with SSG, SEO metadata, Open Graph/Twitter tags, and JSON-LD structured data. Uses Tailwind for styling and renders Markdown content as HTML.
+- Tasks 6-7 (Structured Data and Styling) complete: Both the blog index and post pages have been completely restyled to match the provided designs. Features include:
+  - Hero section with background image on the index page
+  - Card-based blog post grid with cover images and tag pills
+  - Full-width cover images on post pages
+  - Centered title with date and tags
+  - Enhanced typography for blog content including lists, blockquotes, and tables
+  - Newsletter signup section at the bottom of post pages
+  - Automatic tag extraction (with fallbacks if not specified in frontmatter)
+  - Consistent green color scheme matching the site's brand
+*   AMS verification details (AMSPathwayModal, ams_pathway_stage, and related UI) have been commented out on the school listings and detail pages. The code is still present for easy restoration later. No AMS details should now appear to users.
+
+## Lessons (Blog Feature)
+
+* For more complex Markdown parsing needs like interactive blogs, adding custom post-processing with regex replacements can greatly enhance the reading experience without requiring changes to the source Markdown files.
+* When dealing with domain-specific content (like Montessori education), adding special handling for common terms and organization names (MACTE, AMI/AMS) improves both SEO and user experience.
+* Using Tailwind's prose plugin with detailed modifiers provides fine-grained control over typography, but custom selectors like `[&_iframe]` may be needed for elements not directly covered.
+* Blog posts that contain tables, especially comparison tables, benefit from enhanced styling beyond what basic Markdown-to-HTML conversion provides.
+* For embedded content like YouTube videos, special handling is required to ensure responsive design and proper styling.
+
+# Background and Motivation
+The project currently uses Netlify functions to proxy Google Maps API requests, which is causing unnecessary costs. We need to reduce Netlify function invocations by pre-generating maps and geocodes at build time.
+
+# Key Challenges and Analysis
+1. The project uses Google Maps in two main ways:
+   - Geocoding addresses to get coordinates
+   - Generating static map images
+2. All school addresses are known at build time
+3. The data is stored in Supabase
+4. The maps are used in:
+   - School detail pages
+   - Map view component
+   - City pages
+
+# High-level Task Breakdown
+
+## Phase 1: Database Schema Updates
+1. Add new columns to schools table:
+   - [x] `geocode_data` (JSONB) - Store geocoding results
+   - [x] `static_map_url` (TEXT) - Store pre-generated static map URL
+   - [x] `coordinates` (JSONB) - Store lat/lng for map markers
+   - [x] Update School type in TypeScript code
+
+## Phase 2: Build-time Generation Script
+1. Create a new script `scripts/generate-maps.ts` that will:
+   - Fetch all schools from Supabase
+   - For each school:
+     - Call Google Maps API to geocode address
+     - Generate static map URL
+     - Update school record in Supabase with new data
+2. Add script to build process in `package.json`
+
+## Phase 3: Update Components
+1. Modify `SecureGoogleMap` component to:
+   - Use pre-generated data instead of making API calls
+   - Fall back to client-side API only if pre-generated data is missing
+2. Update `MapView` component to use pre-generated coordinates
+
+## Phase 4: Testing and Validation
+1. Add tests for new functionality
+2. Verify all map displays work correctly
+3. Test build process with new script
+
+# Project Status Board
+- [x] Database schema updates
+- [ ] Build-time generation script
+- [ ] Component updates
+- [ ] Testing and validation
+
+# Executor's Feedback or Assistance Requests
+Phase 1 (Database Schema Updates) is complete. We have:
+1. Created a SQL migration file (`supabase/migrations/20240321000000_add_map_columns.sql`) with functions to add the new columns
+2. Created a TypeScript script (`scripts/add-map-columns.ts`) to execute the migration
+3. Updated the School type in `lib/supabase.ts` to include the new columns
+
+Next steps:
+1. Run the migration script to add the columns to the database
+2. Proceed with Phase 2 (Build-time Generation Script)
+
+Would you like me to proceed with running the migration script?
+
+# Lessons
+- When adding new columns to a production database, always use idempotent operations (IF NOT EXISTS) to prevent errors if the script is run multiple times
+- For JSONB columns, it's helpful to define the TypeScript types upfront to ensure type safety throughout the application
+
+## Lessons
+
+*(Learnings and reusable patterns will be documented here)*
+*   Use `tsx` instead of `ts-node` for executing TS scripts in modern Node/Next.js projects to avoid module/extension errors.
+*   When updating Supabase records via script, prefer explicit `.update().eq()` over `.upsert()` if encountering unexpected constraint violations, especially if you know the records already exist.
+*   For large datasets in Supabase, always use pagination with `.range()` to avoid hitting the default 1000-record limit.
+*   When creating slug-based routes, having the actual slug stored in the database reduces complexity compared to calculating it on the fly (though we still need to calculate city_slugs).
+*   For URL parameters that need to be case-insensitive (like state abbreviations), standardize on lowercase in URLs (`/states/ca`) but convert to the appropriate case (uppercase) for database queries.
+*   In Next.js App Router, `generateStaticParams` at each route level can work seamlessly with nested dynamic routes to create a hierarchical structure of statically generated pages.
+*   When checking for non-unique slugs, it's better to fetch all matching items and filter them in the application logic rather than using database-level uniqueness constraints, especially when uniqueness depends on combinations of fields.
+*   In Next.js, avoid destructuring route parameters directly in component function parameters. Instead, first access `props.params` as a whole to prevent "params should be awaited before using its properties" warnings.
+*   When implementing automated tests for SEO, focus on key elements that search engines prioritize: title tags, meta descriptions, heading structure, and canonical URLs.
+*   For testing URL structures in a Next.js application, regular expressions provide a flexible way to define and validate URL patterns across the entire site.
+*   Simple performance testing can be done with fetch and measuring response time, but real-world performance depends on many factors like network conditions, browser rendering, and client-side JavaScript execution.
+*   When deploying to Netlify with pnpm, make sure the pnpm-lock.yaml file is always in sync with package.json to avoid CI build failures, as Netlify uses `--frozen-lockfile` by default.
+*   Always add null and type checks before calling methods like `trim()` on values that might come from external sources (like a database). For social media links or URLs, validate that the value is a string before processing it.
+
+---
+
+# Blog Feature Implementation
+
+## Background and Motivation
+
+The goal is to add a dynamic, SEO-friendly blog section to the Montessori Find V2 website. This leverages existing content provided as Markdown files in the `app/blog` directory. The blog aims to enhance user engagement by providing valuable information to parents searching for Montessori schools, improve site content depth, and contribute positively to SEO. The implementation should utilize Server-Side Rendering (SSR) or Static Site Generation (SSG) principles within the existing Next.js framework and adhere to SEO best practices.
+
+## Key Challenges and Analysis
+
+*   **Technology Choice:** Utilizing the existing Next.js App Router structure is optimal. Libraries like `gray-matter` (for frontmatter parsing) and `remark` with `remark-html` (for Markdown to HTML conversion) are suitable choices.
+*   **Routing:** Need to establish routes for the blog index (`/blog`) and individual posts (`/blog/[slug]`). The slugs will be derived from the Markdown filenames.
+*   **Markdown Processing:**
+    *   A robust function is required to read Markdown files from the `app/blog` directory.
+    *   Extract frontmatter (e.g., `title`, `date`, `description`, `author`, `image`) for metadata.
+    *   Convert Markdown body content to HTML for rendering.
+    *   Handle potential errors during file reading or parsing.
+*   **SEO:**
+    *   Implement dynamic generation of `<title>` and `<meta description>` tags based on frontmatter for both index and post pages.
+    *   Add Open Graph (`og:`) and Twitter Card (`twitter:`) meta tags for social sharing previews.
+    *   Incorporate structured data (Schema.org `BlogPosting`) for individual articles to enhance search engine understanding.
+    *   Ensure clean, descriptive URLs using slugs derived from filenames.
+    *   Consider adding internal linking features (e.g., "Related Posts") in the future.
+    *   Update or generate a `sitemap.xml` to include blog URLs.
+*   **Rendering Strategy:** Static Site Generation (SSG) using `generateStaticParams` (for post pages) and fetching data at build time (for index page) is the preferred approach for a blog with content that doesn't change in real-time. This offers the best performance and SEO benefits.
+*   **Content Structure:** Define a standard frontmatter structure for the Markdown files to ensure consistent metadata extraction (e.g., `title`, `date`, `description`, `author`, `coverImage`).
+*   **UI/UX:** Design and implement simple, clean, and readable layouts for the blog index (list of posts) and individual post pages.
+
+## High-level Task Breakdown
+
+1.  **Standardize Frontmatter & Content:**
+    *   Review existing `.md` files in `app/blog`.
+    *   Define and document a standard frontmatter structure (e.g., `title: string`, `date: YYYY-MM-DD`, `description: string`, `author?: string`, `coverImage?: string`).
+    *   **Action (Manual):** Update all existing `.md` files to conform to this structure. Add placeholder content to `10-benefits-of-montessori-education-for-early-learners.md` if it's meant to be included.
+    *   **Success Criteria:** All `.md` files in `app/blog` have consistent and complete frontmatter.
+2.  **Setup & Dependencies:**
+    *   Install necessary libraries: `npm install gray-matter remark remark-html` (or `pnpm add ...`).
+    *   **Success Criteria:** Dependencies installed successfully.
+3.  **Blog Data Fetching Logic:**
+    *   Create a utility function (e.g., in `lib/blog.ts`) to:
+        *   Read all `.md` files from the `app/blog` directory.
+        *   Parse frontmatter using `gray-matter`.
+        *   Generate a `slug` for each post (from filename).
+        *   Sort posts (e.g., by date descending).
+        *   Provide functions like `getAllPostsData()` (for index) and `getPostData(slug)` (for individual posts, including HTML content generation using `remark`).
+    *   Write unit tests for these utility functions.
+    *   **Success Criteria:** Utility functions correctly read, parse, sort posts, generate slugs, and convert Markdown to HTML. Tests pass.
+4.  **Blog Index Page (`/blog`):**
+    *   Create the route `app/blog/page.tsx`.
+    *   Use the `getAllPostsData()` utility to fetch metadata for all posts (title, slug, date, description) at build time (implicitly SSG in App Router).
+    *   Render a list of blog posts, displaying title, date, description, and linking to `/blog/[slug]`.
+    *   Implement basic page-level SEO: `<title>Blog | Montessori Find</title>`, relevant `<meta description>`.
+    *   Write tests for basic rendering and data display.
+    *   **Success Criteria:** `/blog` page builds statically, displays a list of posts fetched from Markdown files, links correctly, and has basic SEO tags.
+5.  **Blog Post Page (`/blog/[slug]`):**
+    *   Create the dynamic route `app/blog/[slug]/page.tsx`.
+    *   Implement `generateStaticParams` to return `{ slug: '...' }` for each post, using the slugs derived from filenames.
+    *   Implement the page component to:
+        *   Fetch full post data (including HTML content) using `getPostData(params.slug)`.
+        *   Render the post title, metadata (date, author), and HTML content.
+    *   Implement post-specific SEO:
+        *   Dynamic `<title>{post.title} | Montessori Find</title>`.
+        *   Dynamic `<meta name="description" content={post.description}>`.
+        *   Open Graph and Twitter Card meta tags using frontmatter data.
+    *   Write tests for data fetching, Markdown rendering, and presence of key SEO tags.
+    *   **Success Criteria:** Individual post pages `/blog/[slug]` build statically for each post, render content correctly, and have comprehensive, post-specific SEO meta tags.
+6.  **Structured Data (JSON-LD):**
+    *   In the Blog Post Page component (`app/blog/[slug]/page.tsx`), add a `<script type="application/ld+json">` tag.
+    *   Generate JSON-LD data conforming to the Schema.org `BlogPosting` type, using post metadata (headline, datePublished, dateModified, author, image, description, etc.).
+    *   **Success Criteria:** Rendered HTML source of blog post pages includes valid `BlogPosting` JSON-LD structured data.
+7.  **Styling:**
+    *   Apply basic Tailwind CSS styling to `app/blog/page.tsx` and `app/blog/[slug]/page.tsx` for readability and consistency with the rest of the site. Ensure code blocks within posts are styled appropriately.
+    *   **Success Criteria:** Blog index and post pages are visually appealing and readable.
+8.  **Sitemap:**
+    *   Update the sitemap generation logic (if exists, e.g., `app/sitemap.xml.ts`) to include URLs for the blog index page (`/blog`) and all individual blog post pages (`/blog/[slug]`).
+    *   **Success Criteria:** Generated sitemap includes all blog URLs.
+9.  **Testing & Review:**
+    *   Run `pnpm build` and `pnpm start` to test locally.
+    *   Manually review blog index and several post pages for content accuracy, layout, and SEO tag correctness (using browser dev tools).
+    *   Run any relevant automated tests (unit, integration, potentially E2E if configured).
+    *   **Success Criteria:** Blog builds successfully, functions correctly locally, passes manual review and automated tests.
+
+## Project Status Board (Blog Feature)
+
+*   [ ] **1. Standardize Frontmatter & Content** (Requires Manual Action)
+*   [x] **2. Setup & Dependencies**
+*   [x] **3. Blog Data Fetching Logic** (Implement utils + tests)
+*   [x] **4. Blog Index Page (`/blog`)** (Create page, fetch data, render list, basic SEO + tests)
+*   [x] **5. Blog Post Page (`/blog/[slug]`)** (Create page, `generateStaticParams`, fetch/render content, specific SEO + tests)
+*   [x] **6. Structured Data (JSON-LD)** (Implement schema on post pages)
+*   [x] **7. Styling** (Apply Tailwind styles)
+*   [ ] **8. Sitemap** (Update sitemap generation)
+*   [ ] **9. Testing & Review** (Build, manual review, automated tests)
+
+## Executor's Feedback or Assistance Requests (Blog Feature)
+
+- Task 4 (Blog Index Page) fix: Added 'use server' directive to ensure server-only rendering and allow use of fs, resolving the blank page issue.
+- Task 5 (Blog Post Page) complete: Implemented dynamic post page with SSG, SEO metadata, Open Graph/Twitter tags, and JSON-LD structured data. Uses Tailwind for styling and renders Markdown content as HTML.
+- Tasks 6-7 (Structured Data and Styling) complete: Both the blog index and post pages have been completely restyled to match the provided designs. Features include:
+  - Hero section with background image on the index page
+  - Card-based blog post grid with cover images and tag pills
+  - Full-width cover images on post pages
+  - Centered title with date and tags
+  - Enhanced typography for blog content including lists, blockquotes, and tables
+  - Newsletter signup section at the bottom of post pages
+  - Automatic tag extraction (with fallbacks if not specified in frontmatter)
+  - Consistent green color scheme matching the site's brand
+*   AMS verification details (AMSPathwayModal, ams_pathway_stage, and related UI) have been commented out on the school listings and detail pages. The code is still present for easy restoration later. No AMS details should now appear to users.
+
+## Lessons (Blog Feature)
+
+* For more complex Markdown parsing needs like interactive blogs, adding custom post-processing with regex replacements can greatly enhance the reading experience without requiring changes to the source Markdown files.
+* When dealing with domain-specific content (like Montessori education), adding special handling for common terms and organization names (MACTE, AMI/AMS) improves both SEO and user experience.
+* Using Tailwind's prose plugin with detailed modifiers provides fine-grained control over typography, but custom selectors like `[&_iframe]` may be needed for elements not directly covered.
+* Blog posts that contain tables, especially comparison tables, benefit from enhanced styling beyond what basic Markdown-to-HTML conversion provides.
+* For embedded content like YouTube videos, special handling is required to ensure responsive design and proper styling.
+
+# Background and Motivation
+The project currently uses Netlify functions to proxy Google Maps API requests, which is causing unnecessary costs. We need to reduce Netlify function invocations by pre-generating maps and geocodes at build time.
+
+# Key Challenges and Analysis
+1. The project uses Google Maps in two main ways:
+   - Geocoding addresses to get coordinates
+   - Generating static map images
+2. All school addresses are known at build time
+3. The data is stored in Supabase
+4. The maps are used in:
+   - School detail pages
+   - Map view component
+   - City pages
+
+# High-level Task Breakdown
+
+## Phase 1: Database Schema Updates
+1. Add new columns to schools table:
+   - [x] `geocode_data` (JSONB) - Store geocoding results
+   - [x] `static_map_url` (TEXT) - Store pre-generated static map URL
+   - [x] `coordinates` (JSONB) - Store lat/lng for map markers
+   - [x] Update School type in TypeScript code
+
+## Phase 2: Build-time Generation Script
+1. Create a new script `scripts/generate-maps.ts` that will:
+   - Fetch all schools from Supabase
+   - For each school:
+     - Call Google Maps API to geocode address
+     - Generate static map URL
+     - Update school record in Supabase with new data
+2. Add script to build process in `package.json`
+
+## Phase 3: Update Components
+1. Modify `SecureGoogleMap` component to:
+   - Use pre-generated data instead of making API calls
+   - Fall back to client-side API only if pre-generated data is missing
+2. Update `MapView` component to use pre-generated coordinates
+
+## Phase 4: Testing and Validation
+1. Add tests for new functionality
+2. Verify all map displays work correctly
+3. Test build process with new script
+
+# Project Status Board
+- [x] Database schema updates
+- [ ] Build-time generation script
+- [ ] Component updates
+- [ ] Testing and validation
+
+# Executor's Feedback or Assistance Requests
+Phase 1 (Database Schema Updates) is complete. We have:
+1. Created a SQL migration file (`supabase/migrations/20240321000000_add_map_columns.sql`) with functions to add the new columns
+2. Created a TypeScript script (`scripts/add-map-columns.ts`) to execute the migration
+3. Updated the School type in `lib/supabase.ts` to include the new columns
+
+Next steps:
+1. Run the migration script to add the columns to the database
+2. Proceed with Phase 2 (Build-time Generation Script)
+
+Would you like me to proceed with running the migration script?
+
+# Lessons
+- When adding new columns to a production database, always use idempotent operations (IF NOT EXISTS) to prevent errors if the script is run multiple times
+- For JSONB columns, it's helpful to define the TypeScript types upfront to ensure type safety throughout the application
+
+## Lessons
+
+*(Learnings and reusable patterns will be documented here)*
+*   Use `tsx` instead of `ts-node` for executing TS scripts in modern Node/Next.js projects to avoid module/extension errors.
+*   When updating Supabase records via script, prefer explicit `.update().eq()` over `.upsert()` if encountering unexpected constraint violations, especially if you know the records already exist.
+*   For large datasets in Supabase, always use pagination with `.range()` to avoid hitting the default 1000-record limit.
+*   When creating slug-based routes, having the actual slug stored in the database reduces complexity compared to calculating it on the fly (though we still need to calculate city_slugs).
+*   For URL parameters that need to be case-insensitive (like state abbreviations), standardize on lowercase in URLs (`/states/ca`) but convert to the appropriate case (uppercase) for database queries.
+*   In Next.js App Router, `generateStaticParams` at each route level can work seamlessly with nested dynamic routes to create a hierarchical structure of statically generated pages.
+*   When checking for non-unique slugs, it's better to fetch all matching items and filter them in the application logic rather than using database-level uniqueness constraints, especially when uniqueness depends on combinations of fields.
+*   In Next.js, avoid destructuring route parameters directly in component function parameters. Instead, first access `props.params` as a whole to prevent "params should be awaited before using its properties" warnings.
+*   When implementing automated tests for SEO, focus on key elements that search engines prioritize: title tags, meta descriptions, heading structure, and canonical URLs.
+*   For testing URL structures in a Next.js application, regular expressions provide a flexible way to define and validate URL patterns across the entire site.
+*   Simple performance testing can be done with fetch and measuring response time, but real-world performance depends on many factors like network conditions, browser rendering, and client-side JavaScript execution.
+*   When deploying to Netlify with pnpm, make sure the pnpm-lock.yaml file is always in sync with package.json to avoid CI build failures, as Netlify uses `--frozen-lockfile` by default.
+*   Always add null and type checks before calling methods like `trim()` on values that might come from external sources (like a database). For social media links or URLs, validate that the value is a string before processing it.
+
+---
+
+# Blog Feature Implementation
+
+## Background and Motivation
+
+The goal is to add a dynamic, SEO-friendly blog section to the Montessori Find V2 website. This leverages existing content provided as Markdown files in the `app/blog` directory. The blog aims to enhance user engagement by providing valuable information to parents searching for Montessori schools, improve site content depth, and contribute positively to SEO. The implementation should utilize Server-Side Rendering (SSR) or Static Site Generation (SSG) principles within the existing Next.js framework and adhere to SEO best practices.
+
+## Key Challenges and Analysis
+
+*   **Technology Choice:** Utilizing the existing Next.js App Router structure is optimal. Libraries like `gray-matter` (for frontmatter parsing) and `remark` with `remark-html` (for Markdown to HTML conversion) are suitable choices.
+*   **Routing:** Need to establish routes for the blog index (`/blog`) and individual posts (`/blog/[slug]`). The slugs will be derived from the Markdown filenames.
+*   **Markdown Processing:**
+    *   A robust function is required to read Markdown files from the `app/blog` directory.
+    *   Extract frontmatter (e.g., `title`, `date`, `description`, `author`, `image`) for metadata.
+    *   Convert Markdown body content to HTML for rendering.
+    *   Handle potential errors during file reading or parsing.
+*   **SEO:**
+    *   Implement dynamic generation of `<title>` and `<meta description>` tags based on frontmatter for both index and post pages.
+    *   Add Open Graph (`og:`) and Twitter Card (`twitter:`) meta tags for social sharing previews.
+    *   Incorporate structured data (Schema.org `BlogPosting`) for individual articles to enhance search engine understanding.
+    *   Ensure clean, descriptive URLs using slugs derived from filenames.
+    *   Consider adding internal linking features (e.g., "Related Posts") in the future.
+    *   Update or generate a `sitemap.xml` to include blog URLs.
+*   **Rendering Strategy:** Static Site Generation (SSG) using `generateStaticParams` (for post pages) and fetching data at build time (for index page) is the preferred approach for a blog with content that doesn't change in real-time. This offers the best performance and SEO benefits.
+*   **Content Structure:** Define a standard frontmatter structure for the Markdown files to ensure consistent metadata extraction (e.g., `title`, `date`, `description`, `author`, `coverImage`).
+*   **UI/UX:** Design and implement simple, clean, and readable layouts for the blog index (list of posts) and individual post pages.
+
+## High-level Task Breakdown
+
+1.  **Standardize Frontmatter & Content:**
+    *   Review existing `.md` files in `app/blog`.
+    *   Define and document a standard frontmatter structure (e.g., `title: string`, `date: YYYY-MM-DD`, `description: string`, `author?: string`, `coverImage?: string`).
+    *   **Action (Manual):** Update all existing `.md` files to conform to this structure. Add placeholder content to `10-benefits-of-montessori-education-for-early-learners.md` if it's meant to be included.
+    *   **Success Criteria:** All `.md` files in `app/blog` have consistent and complete frontmatter.
+2.  **Setup & Dependencies:**
+    *   Install necessary libraries: `npm install gray-matter remark remark-html` (or `pnpm add ...`).
+    *   **Success Criteria:** Dependencies installed successfully.
+3.  **Blog Data Fetching Logic:**
+    *   Create a utility function (e.g., in `lib/blog.ts`) to:
+        *   Read all `.md` files from the `app/blog` directory.
+        *   Parse frontmatter using `gray-matter`.
+        *   Generate a `slug` for each post (from filename).
+        *   Sort posts (e.g., by date descending).
+        *   Provide functions like `getAllPostsData()` (for index) and `getPostData(slug)` (for individual posts, including HTML content generation using `remark`).
+    *   Write unit tests for these utility functions.
+    *   **Success Criteria:** Utility functions correctly read, parse, sort posts, generate slugs, and convert Markdown to HTML. Tests pass.
+4.  **Blog Index Page (`/blog`):**
+    *   Create the route `app/blog/page.tsx`.
+    *   Use the `getAllPostsData()` utility to fetch metadata for all posts (title, slug, date, description) at build time (implicitly SSG in App Router).
+    *   Render a list of blog posts, displaying title, date, description, and linking to `/blog/[slug]`.
+    *   Implement basic page-level SEO: `<title>Blog | Montessori Find</title>`, relevant `<meta description>`.
+    *   Write tests for basic rendering and data display.
+    *   **Success Criteria:** `/blog` page builds statically, displays a list of posts fetched from Markdown files, links correctly, and has basic SEO tags.
+5.  **Blog Post Page (`/blog/[slug]`):**
+    *   Create the dynamic route `app/blog/[slug]/page.tsx`.
+    *   Implement `generateStaticParams` to return `{ slug: '...' }` for each post, using the slugs derived from filenames.
+    *   Implement the page component to:
+        *   Fetch full post data (including HTML content) using `getPostData(params.slug)`.
+        *   Render the post title, metadata (date, author), and HTML content.
+    *   Implement post-specific SEO:
+        *   Dynamic `<title>{post.title} | Montessori Find</title>`.
+        *   Dynamic `<meta name="description" content={post.description}>`.
+        *   Open Graph and Twitter Card meta tags using frontmatter data.
+    *   Write tests for data fetching, Markdown rendering, and presence of key SEO tags.
+    *   **Success Criteria:** Individual post pages `/blog/[slug]` build statically for each post, render content correctly, and have comprehensive, post-specific SEO meta tags.
+6.  **Structured Data (JSON-LD):**
+    *   In the Blog Post Page component (`app/blog/[slug]/page.tsx`), add a `<script type="application/ld+json">` tag.
+    *   Generate JSON-LD data conforming to the Schema.org `BlogPosting` type, using post metadata (headline, datePublished, dateModified, author, image, description, etc.).
+    *   **Success Criteria:** Rendered HTML source of blog post pages includes valid `BlogPosting` JSON-LD structured data.
+7.  **Styling:**
+    *   Apply basic Tailwind CSS styling to `app/blog/page.tsx` and `app/blog/[slug]/page.tsx` for readability and consistency with the rest of the site. Ensure code blocks within posts are styled appropriately.
+    *   **Success Criteria:** Blog index and post pages are visually appealing and readable.
+8.  **Sitemap:**
+    *   Update the sitemap generation logic (if exists, e.g., `app/sitemap.xml.ts`) to include URLs for the blog index page (`/blog`) and all individual blog post pages (`/blog/[slug]`).
+    *   **Success Criteria:** Generated sitemap includes all blog URLs.
+9.  **Testing & Review:**
+    *   Run `pnpm build` and `pnpm start` to test locally.
+    *   Manually review blog index and several post pages for content accuracy, layout, and SEO tag correctness (using browser dev tools).
+    *   Run any relevant automated tests (unit, integration, potentially E2E if configured).
+    *   **Success Criteria:** Blog builds successfully, functions correctly locally, passes manual review and automated tests.
+
+## Project Status Board (Blog Feature)
+
+*   [ ] **1. Standardize Frontmatter & Content** (Requires Manual Action)
+*   [x] **2. Setup & Dependencies**
+*   [x] **3. Blog Data Fetching Logic** (Implement utils + tests)
+*   [x] **4. Blog Index Page (`/blog`)** (Create page, fetch data, render list, basic SEO + tests)
+*   [x] **5. Blog Post Page (`/blog/[slug]`)** (Create page, `generateStaticParams`, fetch/render content, specific SEO + tests)
+*   [x] **6. Structured Data (JSON-LD)** (Implement schema on post pages)
+*   [x] **7. Styling** (Apply Tailwind styles)
+*   [ ] **8. Sitemap** (Update sitemap generation)
+*   [ ] **9. Testing & Review** (Build, manual review, automated tests)
+
+## Executor's Feedback or Assistance Requests (Blog Feature)
+
+- Task 4 (Blog Index Page) fix: Added 'use server' directive to ensure server-only rendering and allow use of fs, resolving the blank page issue.
+- Task 5 (Blog Post Page) complete: Implemented dynamic post page with SSG, SEO metadata, Open Graph/Twitter tags, and JSON-LD structured data. Uses Tailwind for styling and renders Markdown content as HTML.
+- Tasks 6-7 (Structured Data and Styling) complete: Both the blog index and post pages have been completely restyled to match the provided designs. Features include:
+  - Hero section with background image on the index page
+  - Card-based blog post grid with cover images and tag pills
+  - Full-width cover images on post pages
+  - Centered title with date and tags
+  - Enhanced typography for blog content including lists, blockquotes, and tables
+  - Newsletter signup section at the bottom of post pages
+  - Automatic tag extraction (with fallbacks if not specified in frontmatter)
+  - Consistent green color scheme matching the site's brand
+*   AMS verification details (AMSPathwayModal, ams_pathway_stage, and related UI) have been commented out on the school listings and detail pages. The code is still present for easy restoration later. No AMS details should now appear to users.
+
+## Lessons (Blog Feature)
+
+* For more complex Markdown parsing needs like interactive blogs, adding custom post-processing with regex replacements can greatly enhance the reading experience without requiring changes to the source Markdown files.
+* When dealing with domain-specific content (like Montessori education), adding special handling for common terms and organization names (MACTE, AMI/AMS) improves both SEO and user experience.
+* Using Tailwind's prose plugin with detailed modifiers provides fine-grained control over typography, but custom selectors like `[&_iframe]` may be needed for elements not directly covered.
+* Blog posts that contain tables, especially comparison tables, benefit from enhanced styling beyond what basic Markdown-to-HTML conversion provides.
+* For embedded content like YouTube videos, special handling is required to ensure responsive design and proper styling.
+
+# Background and Motivation
+The project currently uses Netlify functions to proxy Google Maps API requests, which is causing unnecessary costs. We need to reduce Netlify function invocations by pre-generating maps and geocodes at build time.
+
+# Key Challenges and Analysis
+1. The project uses Google Maps in two main ways:
+   - Geocoding addresses to get coordinates
+   - Generating static map images
+2. All school addresses are known at build time
+3. The data is stored in Supabase
+4. The maps are used in:
+   - School detail pages
+   - Map view component
+   - City pages
+
+# High-level Task Breakdown
+
+## Phase 1: Database Schema Updates
+1. Add new columns to schools table:
+   - [x] `geocode_data` (JSONB) - Store geocoding results
+   - [x] `static_map_url` (TEXT) - Store pre-generated static map URL
+   - [x] `coordinates` (JSONB) - Store lat/lng for map markers
+   - [x] Update School type in TypeScript code
+
+## Phase 2: Build-time Generation Script
+1. Create a new script `scripts/generate-maps.ts` that will:
+   - Fetch all schools from Supabase
+   - For each school:
+     - Call Google Maps API to geocode address
+     - Generate static map URL
+     - Update school record in Supabase with new data
+2. Add script to build process in `package.json`
+
+## Phase 3: Update Components
+1. Modify `SecureGoogleMap` component to:
+   - Use pre-generated data instead of making API calls
+   - Fall back to client-side API only if pre-generated data is missing
+2. Update `MapView` component to use pre-generated coordinates
+
+## Phase 4: Testing and Validation
+1. Add tests for new functionality
+2. Verify all map displays work correctly
+3. Test build process with new script
+
+# Project Status Board
+- [x] Database schema updates
+- [ ] Build-time generation script
+- [ ] Component updates
+- [ ] Testing and validation
+
+# Executor's Feedback or Assistance Requests
+Phase 1 (Database Schema Updates) is complete. We have:
+1. Created a SQL migration file (`supabase/migrations/20240321000000_add_map_columns.sql`) with functions to add the new columns
+2. Created a TypeScript script (`scripts/add-map-columns.ts`) to execute the migration
+3. Updated the School type in `lib/supabase.ts` to include the new columns
+
+Next steps:
+1. Run the migration script to add the columns to the database
+2. Proceed with Phase 2 (Build-time Generation Script)
+
+Would you like me to proceed with running the migration script?
+
+# Lessons
+- When adding new columns to a production database, always use idempotent operations (IF NOT EXISTS) to prevent errors if the script is run multiple times
+- For JSONB columns, it's helpful to define the TypeScript types upfront to ensure type safety throughout the application
+
+## Lessons
+
+*(Learnings and reusable patterns will be documented here)*
+*   Use `tsx` instead of `ts-node` for executing TS scripts in modern Node/Next.js projects to avoid module/extension errors.
+*   When updating Supabase records via script, prefer explicit `.update().eq()` over `.upsert()` if encountering unexpected constraint violations, especially if you know the records already exist.
+*   For large datasets in Supabase, always use pagination with `.range()` to avoid hitting the default 1000-record limit.
+*   When creating slug-based routes, having the actual slug stored in the database reduces complexity compared to calculating it on the fly (though we still need to calculate city_slugs).
+*   For URL parameters that need to be case-insensitive (like state abbreviations), standardize on lowercase in URLs (`/states/ca`) but convert to the appropriate case (uppercase) for database queries.
+*   In Next.js App Router, `generateStaticParams` at each route level can work seamlessly with nested dynamic routes to create a hierarchical structure of statically generated pages.
+*   When checking for non-unique slugs, it's better to fetch all matching items and filter them in the application logic rather than using database-level uniqueness constraints, especially when uniqueness depends on combinations of fields.
+*   In Next.js, avoid destructuring route parameters directly in component function parameters. Instead, first access `props.params` as a whole to prevent "params should be awaited before using its properties" warnings.
+*   When implementing automated tests for SEO, focus on key elements that search engines prioritize: title tags, meta descriptions, heading structure, and canonical URLs.
+*   For testing URL structures in a Next.js application, regular expressions provide a flexible way to define and validate URL patterns across the entire site.
+*   Simple performance testing can be done with fetch and measuring response time, but real-world performance depends on many factors like network conditions, browser rendering, and client-side JavaScript execution.
+*   When deploying to Netlify with pnpm, make sure the pnpm-lock.yaml file is always in sync with package.json to avoid CI build failures, as Netlify uses `--frozen-lockfile` by default.
+*   Always add null and type checks before calling methods like `trim()` on values that might come from external sources (like a database). For social media links or URLs, validate that the value is a string before processing it.
+
+---
+
+# Blog Feature Implementation
+
+## Background and Motivation
+
+The goal is to add a dynamic, SEO-friendly blog section to the Montessori Find V2 website. This leverages existing content provided as Markdown files in the `app/blog` directory. The blog aims to enhance user engagement by providing valuable information to parents searching for Montessori schools, improve site content depth, and contribute positively to SEO. The implementation should utilize Server-Side Rendering (SSR) or Static Site Generation (SSG) principles within the existing Next.js framework and adhere to SEO best practices.
+
+## Key Challenges and Analysis
+
+*   **Technology Choice:** Utilizing the existing Next.js App Router structure is optimal. Libraries like `gray-matter` (for frontmatter parsing) and `remark` with `remark-html` (for Markdown to HTML conversion) are suitable choices.
+*   **Routing:** Need to establish routes for the blog index (`/blog`) and individual posts (`/blog/[slug]`). The slugs will be derived from the Markdown filenames.
+*   **Markdown Processing:**
+    *   A robust function is required to read Markdown files from the `app/blog` directory.
+    *   Extract frontmatter (e.g., `title`, `date`, `description`, `author`, `image`) for metadata.
+    *   Convert Markdown body content to HTML for rendering.
+    *   Handle potential errors during file reading or parsing.
+*   **SEO:**
+    *   Implement dynamic generation of `<title>` and `<meta description>` tags based on frontmatter for both index and post pages.
+    *   Add Open Graph (`og:`) and Twitter Card (`twitter:`) meta tags for social sharing previews.
+    *   Incorporate structured data (Schema.org `BlogPosting`) for individual articles to enhance search engine understanding.
+    *   Ensure clean, descriptive URLs using slugs derived from filenames.
+    *   Consider adding internal linking features (e.g., "Related Posts") in the future.
+    *   Update or generate a `sitemap.xml` to include blog URLs.
+*   **Rendering Strategy:** Static Site Generation (SSG) using `generateStaticParams` (for post pages) and fetching data at build time (for index page) is the preferred approach for a blog with content that doesn't change in real-time. This offers the best performance and SEO benefits.
+*   **Content Structure:** Define a standard frontmatter structure for the Markdown files to ensure consistent metadata extraction (e.g., `title`, `date`, `description`, `author`, `coverImage`).
+*   **UI/UX:** Design and implement simple, clean, and readable layouts for the blog index (list of posts) and individual post pages.
+
+## High-level Task Breakdown
+
+1.  **Standardize Frontmatter & Content:**
+    *   Review existing `.md` files in `app/blog`.
+    *   Define and document a standard frontmatter structure (e.g., `title: string`, `date: YYYY-MM-DD`, `description: string`, `author?: string`, `coverImage?: string`).
+    *   **Action (Manual):** Update all existing `.md` files to conform to this structure. Add placeholder content to `10-benefits-of-montessori-education-for-early-learners.md` if it's meant to be included.
+    *   **Success Criteria:** All `.md` files in `app/blog` have consistent and complete frontmatter.
+2.  **Setup & Dependencies:**
+    *   Install necessary libraries: `npm install gray-matter remark remark-html` (or `pnpm add ...`).
+    *   **Success Criteria:** Dependencies installed successfully.
+3.  **Blog Data Fetching Logic:**
+    *   Create a utility function (e.g., in `lib/blog.ts`) to:
+        *   Read all `.md` files from the `app/blog` directory.
+        *   Parse frontmatter using `gray-matter`.
+        *   Generate a `slug` for each post (from filename).
+        *   Sort posts (e.g., by date descending).
+        *   Provide functions like `getAllPostsData()` (for index) and `getPostData(slug)` (for individual posts, including HTML content generation using `remark`).
+    *   Write unit tests for these utility functions.
+    *   **Success Criteria:** Utility functions correctly read, parse, sort posts, generate slugs, and convert Markdown to HTML. Tests pass.
+4.  **Blog Index Page (`/blog`):**
+    *   Create the route `app/blog/page.tsx`.
+    *   Use the `getAllPostsData()` utility to fetch metadata for all posts (title, slug, date, description) at build time (implicitly SSG in App Router).
+    *   Render a list of blog posts, displaying title, date, description, and linking to `/blog/[slug]`.
+    *   Implement basic page-level SEO: `<title>Blog | Montessori Find</title>`, relevant `<meta description>`.
+    *   Write tests for basic rendering and data display.
+    *   **Success Criteria:** `/blog` page builds statically, displays a list of posts fetched from Markdown files, links correctly, and has basic SEO tags.
+5.  **Blog Post Page (`/blog/[slug]`):**
+    *   Create the dynamic route `app/blog/[slug]/page.tsx`.
+    *   Implement `generateStaticParams` to return `{ slug: '...' }` for each post, using the slugs derived from filenames.
+    *   Implement the page component to:
+        *   Fetch full post data (including HTML content) using `getPostData(params.slug)`.
+        *   Render the post title, metadata (date, author), and HTML content.
+    *   Implement post-specific SEO:
+        *   Dynamic `<title>{post.title} | Montessori Find</title>`.
+        *   Dynamic `<meta name="description" content={post.description}>`.
+        *   Open Graph and Twitter Card meta tags using frontmatter data.
+    *   Write tests for data fetching, Markdown rendering, and presence of key SEO tags.
+    *   **Success Criteria:** Individual post pages `/blog/[slug]` build statically for each post, render content correctly, and have comprehensive, post-specific SEO meta tags.
+6.  **Structured Data (JSON-LD):**
+    *   In the Blog Post Page component (`app/blog/[slug]/page.tsx`), add a `<script type="application/ld+json">` tag.
+    *   Generate JSON-LD data conforming to the Schema.org `BlogPosting` type, using post metadata (headline, datePublished, dateModified, author, image, description, etc.).
+    *   **Success Criteria:** Rendered HTML source of blog post pages includes valid `BlogPosting` JSON-LD structured data.
+7.  **Styling:**
+    *   Apply basic Tailwind CSS styling to `app/blog/page.tsx` and `app/blog/[slug]/page.tsx` for readability and consistency with the rest of the site. Ensure code blocks within posts are styled appropriately.
+    *   **Success Criteria:** Blog index and post pages are visually appealing and readable.
+8.  **Sitemap:**
+    *   Update the sitemap generation logic (if exists, e.g., `app/sitemap.xml.ts`) to include URLs for the blog index page (`/blog`) and all individual blog post pages (`/blog/[slug]`).
+    *   **Success Criteria:** Generated sitemap includes all blog URLs.
+9.  **Testing & Review:**
+    *   Run `pnpm build` and `pnpm start` to test locally.
+    *   Manually review blog index and several post pages for content accuracy, layout, and SEO tag correctness (using browser dev tools).
+    *   Run any relevant automated tests (unit, integration, potentially E2E if configured).
+    *   **Success Criteria:** Blog builds successfully, functions correctly locally, passes manual review and automated tests.
+
+## Project Status Board (Blog Feature)
+
+*   [ ] **1. Standardize Frontmatter & Content** (Requires Manual Action)
+*   [x] **2. Setup & Dependencies**
+*   [x] **3. Blog Data Fetching Logic** (Implement utils + tests)
+*   [x] **4. Blog Index Page (`/blog`)** (Create page, fetch data, render list, basic SEO + tests)
+*   [x] **5. Blog Post Page (`/blog/[slug]`)** (Create page, `generateStaticParams`, fetch/render content, specific SEO + tests)
+*   [x] **6. Structured Data (JSON-LD)** (Implement schema on post pages)
+*   [x] **7. Styling** (Apply Tailwind styles)
+*   [ ] **8. Sitemap** (Update sitemap generation)
+*   [ ] **9. Testing & Review** (Build, manual review, automated tests)
+
+## Executor's Feedback or Assistance Requests (Blog Feature)
+
+- Task 4 (Blog Index Page) fix: Added 'use server' directive to ensure server-only rendering and allow use of fs, resolving the blank page issue.
+- Task 5 (Blog Post Page) complete: Implemented dynamic post page with SSG, SEO metadata, Open Graph/Twitter tags, and JSON-LD structured data. Uses Tailwind for styling and renders Markdown content as HTML.
+- Tasks 6-7 (Structured Data and Styling) complete: Both the blog index and post pages have been completely restyled to match the provided designs. Features include:
+  - Hero section with background image on the index page
+  - Card-based blog post grid with cover images and tag pills
+  - Full-width cover images on post pages
+  - Centered title with date and tags
+  - Enhanced typography for blog content including lists, blockquotes, and tables
+  - Newsletter signup section at the bottom of post pages
+  - Automatic tag extraction (with fallbacks if not specified in frontmatter)
+  - Consistent green color scheme matching the site's brand
+*   AMS verification details (AMSPathwayModal, ams_pathway_stage, and related UI) have been commented out on the school listings and detail pages. The code is still present for easy restoration later. No AMS details should now appear to users.
+
+## Lessons (Blog Feature)
+
+* For more complex Markdown parsing needs like interactive blogs, adding custom post-processing with regex replacements can greatly enhance the reading experience without requiring changes to the source Markdown files.
+* When dealing with domain-specific content (like Montessori education), adding special handling for common terms and organization names (MACTE, AMI/AMS) improves both SEO and user experience.
+* Using Tailwind's prose plugin with detailed modifiers provides fine-grained control over typography, but custom selectors like `[&_iframe]` may be needed for elements not directly covered.
+* Blog posts that contain tables, especially comparison tables, benefit from enhanced styling beyond what basic Markdown-to-HTML conversion provides.
+* For embedded content like YouTube videos, special handling is required to ensure responsive design and proper styling.
+
+# Background and Motivation
+The project currently uses Netlify functions to proxy Google Maps API requests, which is causing unnecessary costs. We need to reduce Netlify function invocations by pre-generating maps and geocodes at build time.
+
+# Key Challenges and Analysis
+1. The project uses Google Maps in two main ways:
+   - Geocoding addresses to get coordinates
+   - Generating static map images
+2. All school addresses are known at build time
+3. The data is stored in Supabase
+4. The maps are used in:
+   - School detail pages
+   - Map view component
+   - City pages
+
+# High-level Task Breakdown
+
+## Phase 1: Database Schema Updates
+1. Add new columns to schools table:
+   - [x] `geocode_data` (JSONB) - Store geocoding results
+   - [x] `static_map_url` (TEXT) - Store pre-generated static map URL
+   - [x] `coordinates` (JSONB) - Store lat/lng for map markers
+   - [x] Update School type in TypeScript code
+
+## Phase 2: Build-time Generation Script
+1. Create a new script `scripts/generate-maps.ts` that will:
+   - Fetch all schools from Supabase
+   - For each school:
+     - Call Google Maps API to geocode address
+     - Generate static map URL
+     - Update school record in Supabase with new data
+2. Add script to build process in `package.json`
+
+## Phase 3: Update Components
+1. Modify `SecureGoogleMap` component to:
+   - Use pre-generated data instead of making API calls
+   - Fall back to client-side API only if pre-generated data is missing
+2. Update `MapView` component to use pre-generated coordinates
+
+## Phase 4: Testing and Validation
+1. Add tests for new functionality
+2. Verify all map displays work correctly
+3. Test build process with new script
+
+# Project Status Board
+- [x] Database schema updates
+- [ ] Build-time generation script
+- [ ] Component updates
+- [ ] Testing and validation
+
+# Executor's Feedback or Assistance Requests
+Phase 1 (Database Schema Updates) is complete. We have:
+1. Created a SQL migration file (`supabase/migrations/20240321000000_add_map_columns.sql`) with functions to add the new columns
+2. Created a TypeScript script (`scripts/add-map-columns.ts`) to execute the migration
+3. Updated the School type in `lib/supabase.ts` to include the new columns
+
+Next steps:
+1. Run the migration script to add the columns to the database
+2. Proceed with Phase 2 (Build-time Generation Script)
+
+Would you like me to proceed with running the migration script?
+
+# Lessons
+- When adding new columns to a production database, always use idempotent operations (IF NOT EXISTS) to prevent errors if the script is run multiple times
+- For JSONB columns, it's helpful to define the TypeScript types upfront to ensure type safety throughout the application
+
+## Lessons
+
+*(Learnings and reusable patterns will be documented here)*
+*   Use `tsx` instead of `ts-node` for executing TS scripts in modern Node/Next.js projects to avoid module/extension errors.
+*   When updating Supabase records via script, prefer explicit `.update().eq()` over `.upsert()` if encountering unexpected constraint violations, especially if you know the records already exist.
+*   For large datasets in Supabase, always use pagination with `.range()` to avoid hitting the default 1000-record limit.
+*   When creating slug-based routes, having the actual slug stored in the database reduces complexity compared to calculating it on the fly (though we still need to calculate city_slugs).
+*   For URL parameters that need to be case-insensitive (like state abbreviations), standardize on lowercase in URLs (`/states/ca`) but convert to the appropriate case (uppercase) for database queries.
+*   In Next.js App Router, `generateStaticParams` at each route level can work seamlessly with nested dynamic routes to create a hierarchical structure of statically generated pages.
+*   When checking for non-unique slugs, it's better to fetch all matching items and filter them in the application logic rather than using database-level uniqueness constraints, especially when uniqueness depends on combinations of fields.
+*   In Next.js, avoid destructuring route parameters directly in component function parameters. Instead, first access `props.params` as a whole to prevent "params should be awaited before using its properties" warnings.
+*   When implementing automated tests for SEO, focus on key elements that search engines prioritize: title tags, meta descriptions, heading structure, and canonical URLs.
+*   For testing URL structures in a Next.js application, regular expressions provide a flexible way to define and validate URL patterns across the entire site.
+*   Simple performance testing can be done with fetch and measuring response time, but real-world performance depends on many factors like network conditions, browser rendering, and client-side JavaScript execution.
+*   When deploying to Netlify with pnpm, make sure the pnpm-lock.yaml file is always in sync with package.json to avoid CI build failures, as Netlify uses `--frozen-lockfile` by default.
+*   Always add null and type checks before calling methods like `trim()` on values that might come from external sources (like a database). For social media links or URLs, validate that the value is a string before processing it.
+
+---
+
+# Blog Feature Implementation
+
+## Background and Motivation
+
+The goal is to add a dynamic, SEO-friendly blog section to the Montessori Find V2 website. This leverages existing content provided as Markdown files in the `app/blog` directory. The blog aims to enhance user engagement by providing valuable information to parents searching for Montessori schools, improve site content depth, and contribute positively to SEO. The implementation should utilize Server-Side Rendering (SSR) or Static Site Generation (SSG) principles within the existing Next.js framework and adhere to SEO best practices.
+
+## Key Challenges and Analysis
+
+*   **Technology Choice:** Utilizing the existing Next.js App Router structure is optimal. Libraries like `gray-matter` (for frontmatter parsing) and `remark` with `remark-html` (for Markdown to HTML conversion) are suitable choices.
+*   **Routing:** Need to establish routes for the blog index (`/blog`) and individual posts (`/blog/[slug]`). The slugs will be derived from the Markdown filenames.
+*   **Markdown Processing:**
+    *   A robust function is required to read Markdown files from the `app/blog` directory.
+    *   Extract frontmatter (e.g., `title`, `date`, `description`, `author`, `image`) for metadata.
+    *   Convert Markdown body content to HTML for rendering.
+    *   Handle potential errors during file reading or parsing.
+*   **SEO:**
+    *   Implement dynamic generation of `<title>` and `<meta description>` tags based on frontmatter for both index and post pages.
+    *   Add Open Graph (`og:`) and Twitter Card (`twitter:`) meta tags for social sharing previews.
+    *   Incorporate structured data (Schema.org `BlogPosting`) for individual articles to enhance search engine understanding.
+    *   Ensure clean, descriptive URLs using slugs derived from filenames.
+    *   Consider adding internal linking features (e.g., "Related Posts") in the future.
+    *   Update or generate a `sitemap.xml` to include blog URLs.
+*   **Rendering Strategy:** Static Site Generation (SSG) using `generateStaticParams` (for post pages) and fetching data at build time (for index page) is the preferred approach for a blog with content that doesn't change in real-time. This offers the best performance and SEO benefits.
+*   **Content Structure:** Define a standard frontmatter structure for the Markdown files to ensure consistent metadata extraction (e.g., `title`, `date`, `description`, `author`, `coverImage`).
+*   **UI/UX:** Design and implement simple, clean, and readable layouts for the blog index (list of posts) and individual post pages.
+
+## High-level Task Breakdown
+
+1.  **Standardize Frontmatter & Content:**
+    *   Review existing `.md` files in `app/blog`.
+    *   Define and document a standard frontmatter structure (e.g., `title: string`, `date: YYYY-MM-DD`, `description: string`, `author?: string`, `coverImage?: string`).
+    *   **Action (Manual):** Update all existing `.md` files to

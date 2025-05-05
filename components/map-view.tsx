@@ -44,43 +44,41 @@ export function MapView() {
             throw error
           }
 
-          const geocoder = new google.maps.Geocoder()
           const infoWindow = new google.maps.InfoWindow()
 
           // Add markers for each school
           schools?.forEach((school: School) => {
-            const address = school.address
+            if (!school.coordinates) return;
 
-            geocoder.geocode({ address }, (results: any, status: any) => {
-              if (status === "OK" && results && results[0]) {
-                const marker = new google.maps.Marker({
-                  map,
-                  position: results[0].geometry.location,
-                  title: school.name,
-                })
+            const marker = new google.maps.Marker({
+              map,
+              position: {
+                lat: school.coordinates.lat,
+                lng: school.coordinates.lng
+              },
+              title: school.name,
+            })
 
-                marker.addListener("click", () => {
-                  // Create city slug from the city name
-                  const citySlug = slugify(school.city)
-                  // Use state_abbr in lowercase for URL
-                  const stateAbbr = school.state_abbr.toLowerCase()
-                  
-                  const content = `
-                    <div class="p-2">
-                      <h3 class="font-bold text-lg">${school.name}</h3>
-                      <p class="text-sm">${school.city}, ${school.state_abbr}</p>
-                      <a 
-                        href="/schools/${stateAbbr}/${citySlug}/${school.slug}" 
-                        class="text-emerald-600 hover:text-emerald-700 text-sm mt-2 inline-block"
-                      >
-                        View Details
-                      </a>
-                    </div>
-                  `
-                  infoWindow.setContent(content)
-                  infoWindow.open(map, marker)
-                })
-              }
+            marker.addListener("click", () => {
+              // Create city slug from the city name
+              const citySlug = slugify(school.city)
+              // Use state_abbr in lowercase for URL
+              const stateAbbr = school.state_abbr.toLowerCase()
+              
+              const content = `
+                <div class="p-2">
+                  <h3 class="font-bold text-lg">${school.name}</h3>
+                  <p class="text-sm">${school.city}, ${school.state_abbr}</p>
+                  <a 
+                    href="/schools/${stateAbbr}/${citySlug}/${school.slug}" 
+                    class="text-emerald-600 hover:text-emerald-700 text-sm mt-2 inline-block"
+                  >
+                    View Details
+                  </a>
+                </div>
+              `
+              infoWindow.setContent(content)
+              infoWindow.open(map, marker)
             })
           })
         }

@@ -26,6 +26,7 @@
     "blog:ctas": "tsx scripts/fix-blog-ctas.ts"
   },
   "dependencies": {
+    "@googlemaps/google-maps-services-js": "^3.4.1",
     "@googlemaps/js-api-loader": "latest",
     "@hookform/resolvers": "^3.9.1",
     "@radix-ui/react-accordion": "1.2.2",
