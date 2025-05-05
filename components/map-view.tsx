@@ -11,10 +11,11 @@ export function MapView() {
   const mapRef = useRef<HTMLDivElement>(null)
   const [isLoaded, setIsLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [mapRequested, setMapRequested] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
-    if (!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) {
+    if (!mapRequested || !process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) {
       setError("Google Maps API key is missing")
       return
     }
@@ -88,19 +89,36 @@ export function MapView() {
     }
 
     loadMap()
-  }, [])
+  }, [mapRequested])
 
   if (error) {
     return <div className="h-full flex items-center justify-center bg-red-50 text-red-600 p-4">{error}</div>
   }
 
+  if (!mapRequested) {
+    return (
+      <div className="h-[600px] border rounded-lg overflow-hidden relative">
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-100/80 z-10">
+          <button
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 py-3 rounded-lg shadow-lg text-lg transition"
+            onClick={() => setMapRequested(true)}
+            aria-label="Load interactive map"
+          >
+            Load Map
+          </button>
+        </div>
+        <div className="w-full h-full bg-gray-100" />
+      </div>
+    )
+  }
+
   if (!isLoaded) {
     return (
-      <div className="h-full flex items-center justify-center bg-gray-100">
+      <div className="h-[600px] flex items-center justify-center bg-gray-100">
         <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
       </div>
     )
   }
 
-  return <div ref={mapRef} className="h-full w-full" />
+  return <div ref={mapRef} className="h-[600px] w-full" />
 }
